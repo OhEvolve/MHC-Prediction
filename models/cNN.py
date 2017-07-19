@@ -380,6 +380,35 @@ class BuildModel:
         print 'Finished!'
         
         
+    def save_model(self,silent=False):
+
+        """
+        Attempts to store all useful information about the trained model in a log file, which will
+        be unique from any any other model file
+        """
+
+        # tries to find a model log path that does not exist
+        for i in xrange(10001,100001):
+            fname = './logs/cnn_model_{}.p'.format(i+1)
+            if not os.path.exists(fname): break
+        if not silent: print 'Creating log file as: {}'.format(fname) # alert user
+        
+        # get some default parameters from the model
+        for p in self.model_parameters: model_dict[p] = self.__dict__[p]
+        
+        # TODO: evaluate the weight matrices, and store in dict
+        # labels = ['W_sw','W_pw','W_fc','b_fc']
+        # for l,w in zip(labels,self.weights):
+        #     weight_matrix = self.sess.run(w,feed_dict={})
+        #     model_dict[l] = weight_matrix
+            
+        # pickle file
+        with open(fname, 'w') as f:
+            pickle.dump(model_dict,f)
+        
+        return i+1 # return index of model file for later reference
+
+
     def predict(self,data=[]):
         # if no inputs are specified, use the defaults
         if len(data) == 0:

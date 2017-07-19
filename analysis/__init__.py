@@ -1,4 +1,4 @@
 
 # imports all analysis libraries
 
-__all__ = ['visualize']
+__all__ = ['visualize','statistics']

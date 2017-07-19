@@ -135,11 +135,6 @@ cNN = reload(cNN)
 spiNN = reload(spiNN)
 visualize = reload(visualize)
 
-base_settings = {
-                
-    
-                }
-
 model_settings = {
                  'num_epochs':40,
                  'batch_size':10,

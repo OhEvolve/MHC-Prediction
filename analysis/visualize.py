@@ -38,9 +38,13 @@ def comparison(guesses,actual):
     raw_input('Press enter to close...')
     plt.close()
     
-def auroc(guesses,actual,labels = [],graph = True):
-        
+def auroc(guesses,actual,labels = [],graph = True,silent=False):
+    """
+    Uses a set of guesses and actual values, produces a predictive auROC
+    Optional graphing argument
+    """
     if len(actual) != len(guesses):
+        if not silent: print 'Note: Assumed first entry of real values apply to all guesses...'
         actual = [actual for i in xrange(len(guesses))]
              
     if not labels:

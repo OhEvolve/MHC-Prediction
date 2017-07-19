@@ -1,8 +1,4 @@
 
-# coding: utf-8
-
-# In[32]:
-
 
 '''
 Project: Neural Network for MHC Peptide Prediction
@@ -11,7 +7,7 @@ Function: Generates specified neural network architecture (data agnostic)
 
 Author: Patrick V. Holec
 Date Created: 2/2/2017
-Date Updated: 2/2/2017
+Date Updated: 5/18/2017
 '''
 
 
@@ -112,11 +108,18 @@ def network_loss(y,y_real,W,params):
 Main Class Method
 '''
 
+# TODO: Make l1,l2 loss based on averages
+# TODO: Check to see if pw_depth is working
+# TODO: Parameter count tool
+# 
+
+
 class BuildModel:
     
     def default_model(self):
         # basically every parameter defined in one dictionary
-        default_params = {#'data_augment':False,
+        default_params = {
+                         'data_augment':False,
                          'learning_rate':0.01,
                          'data_normalization': False,
                          'silent': False,
@@ -128,6 +131,7 @@ class BuildModel:
                          'data_label':'test',
                          # overall network parameters
                          'fc_layers':2,
+                         'sw_pw_ratio':0.5, # relative importance of sw branch relative to pw branch (range -> [0,1])
                          # sitewise/pairwise parameters
                          'pw_depth':1,
                          'sw_depth':1,
@@ -140,10 +144,8 @@ class BuildModel:
                          'loss_magnitude':1.0,
                          # regularization parameters
                          'reg_type':'l2',
-                         'reg_magnitude':0.01,
+                         'reg_magnitude':0.01
                          # logging parameters
-                         'training_log':True,
-                         'model_log':True
                          }
         
         self.model_parameters = default_params.keys()
@@ -306,14 +308,14 @@ class BuildModel:
         x_image_pw = tf.transpose(x_image_pw, [0, 2, 3, 1])        
         
         # creating sitewise convolution
-        conv_sw_array = [conv2d(a,b,stride=1,padding='VALID') 
+        conv_sw_array = [float(sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
                          for W_sw_layer in tf.split(W_sw,[1 for i in xrange(self.sw_depth)],3)
                          for a,b in zip(tf.split(x_image_sw,[1 for i in xrange(self.length)],2),
                                    tf.split(W_sw_layer,[1 for i in xrange(self.length)],1))]
         conv_sw = tf.concat(conv_sw_array,1)   
 
         # creating pairwise convolution
-        conv_pw_array = [conv2d(a,b,stride=1,padding='VALID') 
+        conv_pw_array = [(1.-sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
                     for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pairs)],3),
                                    tf.split(W_pw,[1 for i in xrange(self.pairs)],3))]  
         conv_pw = tf.concat(conv_pw_array,1)        
@@ -406,24 +408,32 @@ class BuildModel:
                 self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data
                 
         print 'Final step {}: Batch loss ({})  /  Validation loss ({})'.format(step,epoch_loss,batch_loss_validation)
-        
-        # creates training log files if requested
-        if self.model_log == True:
-            for i in xrange(10001,20001):
-                fname = './logs/model_{}.p'.format(i+1)
-                if not os.path.exists(fname): break
-            print 'Creating log file as: {}'.format(fname) # alert user
-            self.save_model(fname,model_dict = {'step_index':step_index,'step_loss':step_loss})
-        
+
         print 'Training time: ', time.time() - start
         print 'Finished!'
         
-    def save_model(self,fname,model_dict={}):
+        # stores logs of stepwise losses if needed later for saving model performance
+        self.step_index,self.step_loss = step_index,step_loss 
         
+    def save_model(self,silent=False):
+
+        """
+        Attempts to store all useful information about the trained model in a log file, which will
+        be unique from any any other model file
+        """
+
+        # tries to find a model log path that does not exist
+        for i in xrange(10001,100001):
+            fname = './logs/spinn_model_{}.p'.format(i+1)
+            if not os.path.exists(fname): break
+        if not silent: print 'Creating log file as: {}'.format(fname) # alert user
+        
+        model_dict = {'step_index':self.step_index,'step_loss':self.step_loss}
+
         # get some default parameters from the model
         for p in self.model_parameters: model_dict[p] = self.__dict__[p]
         
-        # evaluate the weight matrices
+        # evaluate the weight matrices, and store in dict
         labels = ['W_sw','W_pw','W_fc','b_fc']
         for l,w in zip(labels,self.weights):
             weight_matrix = self.sess.run(w,feed_dict={})
@@ -432,7 +442,8 @@ class BuildModel:
         # pickle file
         with open(fname, 'w') as f:
             pickle.dump(model_dict,f)
-            
+        
+        return i+1 # return index of model file for later reference
 
     def predict(self,data=[]):
         # if no inputs are specified, use the defaults

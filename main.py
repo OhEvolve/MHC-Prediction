@@ -16,7 +16,10 @@ This is for actual data testing
 # standard libraries
 import time
 
-# personal libraries
+# nonstandard libraries
+import numpy as np
+
+# homegrown libraries
 from models import * # libraries: kNN,cNN,spiNN
 from analysis import * # libraries: visualize
 from landscape import generate_test_set as gts,parameterize_data as pd,compile_data as cd
@@ -93,17 +96,28 @@ def main():
         ## kNN Model
         print 'Starting kNN model...'
 
-        data_settings = {
-                     'num_epochs':100,'learning_rate':0.001,
-                     'data_augment':False,'data_normalization':True,
-                     'fc_fn':('linear','linear'),
-                     'test_fraction': test_fraction,
-                     'silent':False
-                    }
+	data_settings = {
+			 'num_epochs':40,
+			 'batch_size':10,
+			 'learning_rate':0.0005,
+			 'data_augment':False,
+			 'data_normalization':True,
+			 'fc_fn':('linear','linear','linear'),
+			 'fc_dropout':(1.0,1.0,1.0),
+			 'fc_depth':(8,1),
+			 'fc_layers':2,
+			 'test_fraction': 0.25,
+			 'data_label':set_name,
+			 'silent':False,
+			 'reg_magnitude':0.2,
+			 'model_log':True
+			 }
 
-
-        model = kNN.BuildModel(set_name,data_settings)
-        model.data_format()
+        m = spiNN.BuildModel(all_model_settings)
+        m.()
+        
+	model = kNN.BuildModel(data_settings)
+        model.fold_data()
         guesses1 = model.predict()
         all_guesses.append(guesses1)
         #vis.comparison(guesses1,model.test_labels)
@@ -120,7 +134,7 @@ def main():
                     }
 
 
-        model = cNN.BuildModel(set_name,data_settings)
+        model = cNN.BuildModel(data_settings)
         model.data_format()
         model.network_initialization()
         model.train()
@@ -147,7 +161,7 @@ def main():
                     }
 
 
-        model = cNN.BuildModel(set_name,data_settings)
+        model = cNN.BuildModel(data_settings)
         model.data_format()
         model.network_initialization()
         model.train()
