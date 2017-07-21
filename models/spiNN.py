@@ -79,7 +79,7 @@ def max_pool(x, stride=2, filter_size=2, padding='SAME'):
         filter_size,stride = [1, filter_size, filter_size, 1],[1, stride, stride, 1]
     return tf.nn.max_pool(x, ksize=filter_size,strides=stride, padding=padding)
 
-# TODO: probably not used?
+# NOTE: probably not used?
 def cross_entropy(y, y_real, W1=None,W2=None,W1fc=None,W2fc=None,modifications=['NONE'],loss_type='NONE',loss_coeff=0):
     return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y, y_real))
 
@@ -94,13 +94,14 @@ def activation_fn(inp,fn=None,dropout=1.0):
     return tf.nn.dropout(inp, dropout)
 
 def network_loss(y,y_real,W,params):
+    val = tf.constant(1.0) # make a quick flaot32 variable for shorter calls
     # base loss
-    if params['loss_type'] == 'l1': loss = params['loss_magnitude']*tf.reduce_sum(tf.abs(tf.subtract(y,y_real)))
-    if params['loss_type'] == 'l2': loss = params['loss_magnitude']*tf.nn.l2_loss(tf.subtract(y,y_real))
+    if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_mean(tf.abs(tf.subtract(y,y_real)))
+    if params['loss_type'] == 'l2': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.nn.l2_loss(tf.subtract(y,y_real))
     else: loss = 0
     # regularization loss
-    if params['reg_type'] == 'l1': loss += params['reg_magnitude']*tf.reduce_sum([tf.reduce_sum(tf.abs(w)) for w in W])
-    if params['reg_type'] == 'l2': loss += params['reg_magnitude']*tf.reduce_sum([tf.nn.l2_loss(w) for w in W])
+    if params['reg_type'] == 'l1': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.reduce_sum(tf.abs(w)) for w in W])
+    if params['reg_type'] == 'l2': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.nn.l2_loss(w) for w in W])
     return loss
 
 
@@ -109,8 +110,9 @@ Main Class Method
 '''
 
 # TODO: Make l1,l2 loss based on averages
-# TODO: Check to see if pw_depth is working
-# TODO: Parameter count tool
+# DONE: Check to see if pw_depth is working
+# DONE: Reset graph after __init__
+# DONE: Parameter count tool
 # 
 
 
@@ -161,12 +163,19 @@ class BuildModel:
         
         # checks for adequete coverage
         assert len(self.fc_depth) >= self.fc_layers,'Entries in depth less than number of fc layers.'
+
+    def count_trainable_parameters(self):
+        """
+        Return the total number of trainable parameters in the model, which is useful for system model matching
+        """
+        return np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]) 
         
     # model initialization
     def __init__(self,params = {}):
         
-        # set all default parameters
+        # set all default parameters and reset graph
         self.default_model()
+        tf.reset_default_graph()
         
         # check to see if there is an update
         if params:
@@ -293,7 +302,7 @@ class BuildModel:
         
         # initialize filters
         W_sw = weight_variable((self.aa_count,self.length,1,self.sw_depth))
-        W_pw = weight_variable((self.aa_count,self.aa_count,1,self.pairs))
+        W_pw = weight_variable((self.aa_count,self.aa_count,1,self.pairs,self.pw_depth))
     
         # Load data 
         self.train_x = tf.placeholder(tf.float32, shape=(None, sum(self.full_size))) # full vector input
@@ -308,24 +317,29 @@ class BuildModel:
         x_image_pw = tf.transpose(x_image_pw, [0, 2, 3, 1])        
         
         # creating sitewise convolution
-        conv_sw_array = [float(sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
+        conv_sw_array = [float(self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
                          for W_sw_layer in tf.split(W_sw,[1 for i in xrange(self.sw_depth)],3)
                          for a,b in zip(tf.split(x_image_sw,[1 for i in xrange(self.length)],2),
                                    tf.split(W_sw_layer,[1 for i in xrange(self.length)],1))]
         conv_sw = tf.concat(conv_sw_array,1)   
 
+        if not self.silent: print 'Conv. SW shape: {}'.format(conv_sw.shape)
+
         # creating pairwise convolution
-        conv_pw_array = [(1.-sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
-                    for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pairs)],3),
-                                   tf.split(W_pw,[1 for i in xrange(self.pairs)],3))]  
+        conv_pw_array = [(1.-self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
+                         for W_pw_layer in tf.split(W_pw,[1 for i in xrange(self.pw_depth)],4) 
+                         for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pairs)],3),
+                                   tf.split(tf.squeeze(W_pw_layer,[4]),[1 for i in xrange(self.pairs)],3))]  
         conv_pw = tf.concat(conv_pw_array,1)        
         
+        if not self.silent: print 'Conv. PW shape: {}'.format(conv_pw.shape)
+
         layers = [tf.concat([conv_sw,conv_pw],1)] # join layers
         
         # build dimensions to be sure we get this right        
         numel = int(layers[-1].shape[1]*layers[-1].shape[2]*layers[-1].shape[3])
         layers.append(tf.reshape(layers[-1],[-1,numel]))
-        print 'Flattened layer shape:',layers[-1].shape
+        if not self.silent: print 'Flattened layer shape:',layers[-1].shape
         
         ## FULLY CONNECTED LAYER (FC) GENERATOR ##
         # temporary variables for non-symmetry
@@ -339,7 +353,7 @@ class BuildModel:
         for i in xrange(self.fc_layers):
             layers.append(activation_fn(tf.matmul(layers[-1],W_fc[i]) + b_fc[i],
                           fn=self.fc_fn[i],dropout=self.fc_dropout[i]))
-            print 'Layer {} fc output: {}'.format(i+1,layers[-1].shape)
+            if not self.silent: print 'Layer {} fc output: {}'.format(i+1,layers[-1].shape)
         
         ## TRAINING METHODS
         self.y_out = layers[-1]
