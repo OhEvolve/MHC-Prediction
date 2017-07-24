@@ -17,6 +17,7 @@ This is intended to function as a standardization for the generation of NN model
 # standard libraries
 import time
 import pickle
+import os
 
 # nonstandard libraries
 import numpy as np
@@ -49,7 +50,7 @@ def append_dicts(old_dict,*dict_args):
     for dictionary in dict_args:
         for key in dictionary.keys():
             if not key in old_dict.keys():
-                print 'Adding parameter: {} -> {}'
+                print 'Adding parameter: {} -> {}'.format(key,dictionary[key])
                 old_dict[key] = dictionary[key]
     return old_dict
 
@@ -124,8 +125,8 @@ def model_testing(settings,silent=False):
         datasets_train.append((m.predict(m.train_data),m.train_labels))
 
         # generate and store auROC scores 
-        datasets_test.append(statistics.auroc(datasets_test[-1][0],datasets_test[-1][1])
-        datasets_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1])
+        datasets_test.append(statistics.auroc(datasets_test[-1][0],datasets_test[-1][1]))
+        datasets_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1]))
 
         ## NOTE: to save memory, I am *not* going to save models in general runs, but this is something to change
         # m.save_model()

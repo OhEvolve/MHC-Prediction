@@ -1,0 +1,8 @@
+# compile python code
+*.pyc
+# data files
+*seqs.txt
+*.p 
+# logs and models folder
+logs
+models

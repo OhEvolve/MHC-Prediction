@@ -109,7 +109,7 @@ def network_loss(y,y_real,W,params):
 Main Class Method
 '''
 
-# TODO: Make l1,l2 loss based on averages
+# DONE: Make l1,l2 loss based on averages
 # DONE: Check to see if pw_depth is working
 # DONE: Reset graph after __init__
 # DONE: Parameter count tool
@@ -128,7 +128,6 @@ class BuildModel:
                          'test_fraction': 0.1,
                          'batch_size':100,
                          'num_epochs':50,
-                         'loss_coeff':0.01,
                          'learning_rate':0.1,
                          'data_label':'test',
                          # overall network parameters
