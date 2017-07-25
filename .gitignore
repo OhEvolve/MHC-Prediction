@@ -6,6 +6,6 @@
 *seqs.txt
 *.p 
 # logs and models folder
-logs
+logs/*
 # retired code
-retired
+retired/*
