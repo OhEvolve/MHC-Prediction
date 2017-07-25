@@ -1,5 +1,7 @@
 # compile python code
 *.pyc
+# swp files
+*.swp
 # data files
 *seqs.txt
 *.p 
