@@ -1,3 +1,5 @@
+## TODO: Figure out why all .pyc's are syncing
+## TODO: Remove need to past test_seqs and test_params
 # compile python code
 *.pyc
 !__init__.pyc
@@ -7,6 +9,7 @@
 *seqs.txt
 !test_seqs.txt
 *.p 
+!test_params.p
 # logs and models folder
 logs/*
 # retired code
