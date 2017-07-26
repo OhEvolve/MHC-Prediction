@@ -99,10 +99,15 @@ def default_variables(model_type='spinn'):
         return {}
     elif model_type == 'spinn':
         return {
-                'reg_magnitude':[0.01,0.1,1.0,10.0,100.0],
+                'reg_magnitude':[0.01,0.3,0.1,1.0,10.0,100.0],
                 'reg_type':['l1','l2'],
                 'learning_rate':[0.1,1.0,10.0],
-                'sw_pw_ratio':[0.1,0.25,0.5,0.75,0.9]
+                'sw_pw_ratio':[0.1,0.25,0.5,0.75,0.9],
+                'sw_depth':[1,2,4],
+                'pw_depth':[1,2,4],
+                'fc_fn':[('linear','linear'),('relu','relu'),('sigmoid ','sigmoid')],
+                'fc_dropout':[(1.0,1.0),(0.75,0.75),(0.5,0.5),(0.25,0.25)],
+                'fc_depth':[(4,1),(8,1),(16,1),(32,1),(64,1)]
                }
 
 # DONE: Add parameters to variables

@@ -125,8 +125,8 @@ def model_testing(settings,silent=False):
         datasets_train.append((m.predict(m.train_data),m.train_labels))
 
         # generate and store auROC scores 
-        datasets_test.append(statistics.auroc(datasets_test[-1][0],datasets_test[-1][1]))
-        datasets_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1]))
+        scores_test.append(statistics.auroc(datasets_test[-1][0],datasets_test[-1][1]))
+        scores_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1]))
 
         ## NOTE: to save memory, I am *not* going to save models in general runs, but this is something to change
         # m.save_model()
@@ -143,4 +143,5 @@ def model_testing(settings,silent=False):
     # save results to an unused file location, with settings metadata
     save_results(results) 
 
+    
 

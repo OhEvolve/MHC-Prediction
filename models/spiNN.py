@@ -138,7 +138,7 @@ class BuildModel:
                          'sw_depth':1,
                          # fully connected parameters
                          'fc_depth':(16,1),
-                         'fc_fn':('sigmoid ','sigmoid','linear'),
+                         'fc_fn':('sigmoid ','sigmoid'),
                          'fc_dropout':(1.0,1.0),
                          # loss parameters
                          'loss_type':'l2',
@@ -216,6 +216,7 @@ class BuildModel:
         # Start tensorflow engine
         print 'Initializing variables...'
         self.sess = tf.Session(config=config)
+        self.reset_all_variables = tf.initialize_all_variables()
         
         
     def fold_data(self,params = {}):
@@ -295,7 +296,7 @@ class BuildModel:
         
     def network_initialization(self):
 
-        #tf.reset_default_graph()
+        #tf.reset_default_graph() # This breaks things last time I checked
         
         print 'Building model...'
         
@@ -364,6 +365,9 @@ class BuildModel:
         #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         
+        # (re)-initialize all variables
+        self.sess.run(self.reset_all_variables)       
+
         print 'Finished!'        
 
         
@@ -461,6 +465,7 @@ class BuildModel:
     def predict(self,data=[]):
         # if no inputs are specified, use the defaults
         if len(data) == 0:
+            print 'No data input to be predicted, using test data!'
             data = self.test_data
         
         # create distance matrix
