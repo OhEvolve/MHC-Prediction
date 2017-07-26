@@ -1,10 +1,11 @@
 # compile python code
-*.pyc # I want to put this up, but there are init files in package folders that are necessary
+*.pyc
 !__init__.pyc
 # swp files
 *.swp
 # data files
 *seqs.txt
+!test_seqs.txt
 *.p 
 # logs and models folder
 logs/*
