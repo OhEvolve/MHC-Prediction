@@ -217,7 +217,7 @@ class BuildModel:
         # Start tensorflow engine
         print 'Initializing variables...'
         self.sess = tf.Session(config=config)
-        self.reset_all_variables = tf.initialize_all_variables()
+        self.reset_all_variables = tf.global_variables_initializer()
         
         
     def fold_data(self,params = {}):
