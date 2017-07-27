@@ -1,4 +1,4 @@
-
+## TODO: make logs directory if not there previously
 
 '''
 Project: Neural Network for MHC Peptide Prediction
