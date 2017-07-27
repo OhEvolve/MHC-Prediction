@@ -5,7 +5,7 @@ NOT FOR RUNNING REAL SIMULATION
 """
 
 
-#'''
+'''
 
 from models import * # libraries: kNN,cNN,spiNN
 
@@ -30,18 +30,23 @@ for i in xrange(1,5):
 
 #'''
 
-'''
+from multiprocessing.dummy import Pool as ThreadPool 
+import time
 
-import numpy as np
-import tensorflow as tf
+def my_function(val):
+    for i in xrange(400000):
+        val += 1
+    return val
 
-y = tf.constant([[1,2],[3,4]])
 
-a = (tf.constant(1.0)/tf.size(y,out_type=tf.float32))
+my_array = [10*i for i in xrange(32)]
 
-sess = tf.Session()
 
-print sess.run(a)
-
-#'''
-
+for threads in [1,2,4,8,16]:
+    start = time.time()
+    pool = ThreadPool(threads) 
+    results = pool.map(my_function, my_array)
+    pool.close()
+    pool.join()
+    
+    print 'Thread count: {} -> Elapsed time: {}'.format(threads,time.time() - start)

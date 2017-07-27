@@ -72,7 +72,7 @@ def save_results(my_dict,silent=False):
     Finds unused namespace and pickles dictionary
     """
     # tries to find a model log path that does not exist
-    for i in xrange(10001,100001):
+    for i in xrange(100001,1000001):
         fname = './logs/results_{}.p'.format(i+1)
         if not os.path.exists(fname): break
     if not silent: print 'Creating log file as: {}'.format(fname) # alert user

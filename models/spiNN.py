@@ -90,6 +90,7 @@ def activation_fn(inp,fn=None,dropout=1.0):
     elif fn == 'sigmoid': return tf.nn.dropout(tf.nn.sigmoid(inp), dropout)
     elif fn == 'tanh': return tf.nn.dropout(tf.nn.tanh(inp), dropout)
     elif fn == 'softplus': return tf.nn.dropout(tf.nn.softplus(inp), dropout)
+    elif fn == 'linear': return tf.nn.dropout(inp,dropout)
     elif type(fn) == str: print '{} function not recognized, using default (NONE)...'.format(fn)
     return tf.nn.dropout(inp, dropout)
 
