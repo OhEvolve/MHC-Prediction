@@ -118,7 +118,7 @@ def default_variables(model_type='spinn'):
                 'pw_depth':[1,2,4],
                 'fc_fn':[('linear','linear'),('relu','relu'),('sigmoid','sigmoid')],
                 'fc_dropout':[(1.0,1.0),(0.75,0.75),(0.5,0.5),(0.25,0.25)],
-                'fc_depth':[(4,1),(8,1),(16,1),(32,1),(64,1)]
+                'fc_depth':[(32,1)]
                }
 
 # DONE: Add parameters to variables
