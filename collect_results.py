@@ -59,7 +59,7 @@ for i,f in enumerate(log_files):
     
 os.chdir('..')
 
-with open('east4_results.csv','wb') as f:
+with open('central1_results.csv','wb') as f:
     writer = csv.writer(f)
     writer.writerows([header] + data_extract)
 
