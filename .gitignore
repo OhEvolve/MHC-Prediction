@@ -13,4 +13,4 @@
 # logs and models folder
 logs/*
 # retired code
-retired/*
+#retired/*
