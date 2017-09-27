@@ -11,6 +11,8 @@ Date Updated: 5/18/2017
 '''
 
 
+
+
 # standard libaries
 import math
 import time
@@ -22,13 +24,19 @@ import pickle
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
+
+# homegrown libraries
 import load_data
 
 # library modifications
 random.seed(42)
 tf.set_random_seed(42)
 
+
+
+
 def main():
+
     data_settings = {
                      'num_epochs':100,'learning_rate':0.001,
                      'data_augment':False,'data_normalization':True,
@@ -50,6 +58,15 @@ def main():
 Factory Methods
 '''
 
+def matmul_tensor(tensor):
+    return [tf.map_fn(lambda x: tf.matmul(tf.expand_dims(x[:,0],1),tf.expand_dims(x[:,1],0)),t) for t in tensor]    
+
+def split_tensor(tensor,axis=2):
+    return tf.split(tensor,[1 for i in xrange(tensor.get_shape()[axis])],axis)
+
+def join_tensor(a,b,axis=2):
+    return tf.squeeze(tf.stack([a,b],axis=axis),axis=3)
+
 # given any number of dicts, shallow copy and merge into a new dict, precedence goes to key value pairs in latter dicts.
 def merge_dicts(*dict_args):
     result = {}
@@ -60,7 +77,7 @@ def merge_dicts(*dict_args):
 # create a weight variable
 def weight_variable(shape):
     """Create a weight variable with appropriate initialization."""
-    initial = tf.truncated_normal(shape, stddev=0.00001)
+    initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
 
 # create a bias variable
@@ -130,7 +147,7 @@ class BuildModel:
                          'batch_size':100,
                          'num_epochs':50,
                          'learning_rate':0.1,
-                         'data_label':'test',
+                         'data_label':'A12',
                          # overall network parameters
                          'fc_layers':2,
                          'sw_pw_ratio':0.5, # relative importance of sw branch relative to pw branch (range -> [0,1])
@@ -153,54 +170,93 @@ class BuildModel:
         self.model_parameters = default_params.keys()
         
         # apply all changes
-        self.update_model(default_params)
+        for key, value in default_params.items():
+            setattr(self, key, value)
 
     # use a dictionary to update class attributes
     def update_model(self,params={}):
-        # makes params dictionary onto class attributes
+        # updates parameters
         for key, value in params.items():
             setattr(self, key, value)
+
+        # makes params dictionary onto class attributes
+        if not self.silent and params: # prints log of model changes
+            print 'Updating model with new parameters:'
+            for key,value in params.iteritems(): print '  - {}: {}'.format(key,value)
         
         # checks for adequete coverage
         assert len(self.fc_depth) >= self.fc_layers,'Entries in depth less than number of fc layers.'
 
     def count_trainable_parameters(self):
         """
-        Return the total number of trainable parameters in the model, which is useful for system model matching
+        Return the total number of trainable parameters in the model, 
+        which is useful for system model matching
         """
         return np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]) 
         
+    def load_data(self):
+
+        # open file and store lines
+        with open('./data/{}.txt'.format(self.data_label),'rb') as txtfile:
+            reader = txtfile.readlines()
+            raw_seqs = [r.split(',')[0] for r in reader] 
+            raw_labels = [float(r.split(',')[1]) for r in reader] 
+
+        # get parameters out of data
+        chars = ''.join(sorted(set(''.join(raw_seqs))))
+        self.length = len(raw_seqs[0]) 
+        self.aa_count = len(chars)
+        self.characters = chars 
+        self.sequence_count = len(raw_seqs)
+        self.pair_count = (self.length*(self.length-1))/2        
+
+        if not self.silent:
+            print 'Loaded data with following parameters:'
+            print ' > File location:','./data/{}.txt'.format(self.data_label)
+            print ' > Peptide length:',self.length
+            print ' > AA count:',self.aa_count
+            print ' > Character list:',self.characters
+            print ' > Samples:',self.sequence_count
+
+        # always make label array
+        self.all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1,1))
+
+        # one-hot encoding (sitewise) -> there is no more pw split
+        self.all_data_sw = np.zeros((
+            len(raw_seqs),
+            self.aa_count,
+            self.length),np.bool)
+        for i,sample in enumerate(raw_seqs):
+            for j,char in enumerate(sample):
+                try: self.all_data_sw[i,self.characters.index(char),j] = 1
+                except ValueError: # this should never occur
+                    raw_input('ERROR:' + self.characters + ' - ' + char)
+
+        # save the information that matters
+        sw_dim = self.all_data_sw.shape
+        self.all_data = np.reshape(self.all_data_sw,(sw_dim[0],sw_dim[1]*sw_dim[2]))
+
+
     # model initialization
     def __init__(self,params = {}):
+
+        # print version numbers that matter
+        print 'Loaded Tensorflow library {}.'.format(tf.__version__)
         
         # set all default parameters and reset graph
         self.default_model()
         tf.reset_default_graph()
         
-        # check to see if there is an update
-        if params:
-            print 'Updating model with new parameters:'
-            for key,value in params.iteritems(): print '  - {}: {}'.format(key,value)
-            self.update_model(params)
+        # modify Tensorflow's verbosity
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        
+        # updates parameters
+        self.update_model(params)
         
         print 'Initializing neural network data acquisition...'        
         
-        # load data parameters
-        data = load_data.LoadData(self.data_label)
-        self.__dict__.update(data.params)
-        self.all_data_sw,self.all_data_pw = data.data_array_sw,data.data_array_pw # load all variables
-        self.all_labels = data.label_array
-        
-        self.sw_dim,self.pw_dim = self.all_data_sw.shape,self.all_data_pw.shape # save dimensions of original data
-        self.full_size = (self.all_data_sw[0].size,self.all_data_pw[0].size) # number of entries in each input data
-        self.pairs = (self.length*(self.length-1))/2        
-        
-        # verified reduction of dimension and merging
-        self.flatten_data_sw = np.reshape(self.all_data_sw,
-                                          (self.pw_dim[0],self.sw_dim[1]*self.sw_dim[2]))
-        self.flatten_data_pw = np.reshape(self.all_data_pw,
-                                          (self.pw_dim[0],self.pw_dim[1]*self.pw_dim[2]*self.pw_dim[3]))
-        self.all_data = np.concatenate((self.flatten_data_sw,self.flatten_data_pw),axis=1)
+        # loads data based on label, creates all_data
+        self.load_data()
         
          # update on model parameters
         if not self.silent:
@@ -208,24 +264,22 @@ class BuildModel:
             print '  - Sequence length:',self.length
             print '  - AA count:',self.aa_count       
             
-        print 'Finished acquisition!'
+        if not self.silent: print 'Finished acquisition!'
         
         # Create GPU configuration
         config = tf.ConfigProto()
+        config.log_device_placement = False # super verbose mode
         config.gpu_options.allow_growth = True
+        #config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
         # Start tensorflow engine
         print 'Initializing variables...'
         self.sess = tf.Session(config=config)
-        self.reset_all_variables = tf.initialize_all_variables()
-        
+        self.reset_all_variables = tf.global_variables_initializer()
         
     def fold_data(self,params = {}):
-        # check to see if there is an update
-        if params:
-            print 'Updating model with new parameters:'
-            for key,value in params.iteritems(): print '  - {}: {}'.format(key,value)
-            self.update_model(params)
+        # updates parameters
+        self.update_model(params)
             
         print 'Starting data formatting...'
         
@@ -236,7 +290,7 @@ class BuildModel:
         self.limits = [i*int(self.test_fraction*self.all_data.shape[0]) for i in xrange(self.fold_total+1)]
         np.array(random.shuffle(self.order))
 
-        print '{} folds generated, fold {} arbitrary picked.'.format(self.fold_total,1)
+        if not self.silent: print '{} data folds generated.'.format(self.fold_total)
                 
         # normalize label energy
         if self.data_normalization == True:
@@ -248,7 +302,7 @@ class BuildModel:
         
         self.fold_pick(1)
         
-        print 'Finished formatting!'
+        if not self.silent: print 'Finished formatting!'
 
         
     def fold_pick(self,fold_index):
@@ -285,7 +339,7 @@ class BuildModel:
             self.train_labels = self.all_labels[order,:]
             self.test_labels = self.all_labels[order_not,:]
         
-        print 'Data specified by user!'
+        if not self.silent: print 'Data specified by user!'
         
     def set_training(self,data,labels):
         self.train_data = data
@@ -299,23 +353,30 @@ class BuildModel:
 
         #tf.reset_default_graph() # This breaks things last time I checked
         
-        print 'Building model...'
+        if not self.silent: print 'Building model...'
         
         # initialize filters
         W_sw = weight_variable((self.aa_count,self.length,1,self.sw_depth))
-        W_pw = weight_variable((self.aa_count,self.aa_count,1,self.pairs,self.pw_depth))
+        W_pw = weight_variable((self.aa_count,self.aa_count,1,self.pair_count,self.pw_depth))
     
-        # Load data 
-        self.train_x = tf.placeholder(tf.float32, shape=(None, sum(self.full_size))) # full vector input
-        self.train_y = tf.placeholder(tf.float32, shape=(None, 1)) # full energy input
+        # TODO: Consider modifications that use less dense data types
+        # Load data (this is now straight to _sw
+        with tf.device('/cpu:0'):
+            self.train_x = tf.placeholder(tf.float32, shape=(None, self.aa_count*self.length)) # full vector input
+            self.train_y = tf.placeholder(tf.float32, shape=(None, 1)) # full energy input
 
-        # Split the pw/sw entries into two streams
-        train_x_sw,train_x_pw = tf.split(self.train_x,[self.full_size[0],self.full_size[1]],1)
+            # Sitewise build
+            x_image_sw = tf.reshape(self.train_x, [-1, self.aa_count, self.length, 1])
 
-        #x_image_sw = tf.transpose(tf.reshape(train_x_sw, [-1, self.aa_count, self.length, 1]))
-        x_image_sw = tf.reshape(train_x_sw, [-1, self.aa_count, self.length, 1])
-        x_image_pw = tf.reshape(train_x_pw, [-1, self.pairs, self.aa_count, self.aa_count])        
-        x_image_pw = tf.transpose(x_image_pw, [0, 2, 3, 1])        
+            # Create pair indices for later
+            pairs = [(i,j) for i in xrange(0,self.length-1) for j in xrange(i+1,self.length)] # create list of pairs
+
+            # Pairwise build 
+            input_split = split_tensor(tf.squeeze(x_image_sw,axis=3),axis=2) # makes [(?,a),(?,a)...]
+            input_paired = [join_tensor(input_split[i],input_split[j]) for i,j in pairs] # makes [(?,a,2),(?,a,2)...]
+            input_matmul = matmul_tensor(input_paired) # makes [(?,a,a),(?,a,a)...]
+            x_image_pw = tf.stack(input_matmul,axis=1) # makes (?,a,a,l*(l-1)/2)
+            x_image_pw = tf.transpose(x_image_pw, [0, 2, 3, 1]) # makes (?,a,l*(l-1)/2,a)       
         
         # creating sitewise convolution
         conv_sw_array = [float(self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
@@ -329,19 +390,19 @@ class BuildModel:
         # creating pairwise convolution
         conv_pw_array = [(1.-self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
                          for W_pw_layer in tf.split(W_pw,[1 for i in xrange(self.pw_depth)],4) 
-                         for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pairs)],3),
-                                   tf.split(tf.squeeze(W_pw_layer,[4]),[1 for i in xrange(self.pairs)],3))]  
+                         for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pair_count)],3),
+                                   tf.split(tf.squeeze(W_pw_layer,[4]),[1 for i in xrange(self.pair_count)],3))]  
         conv_pw = tf.concat(conv_pw_array,1)        
-        
+    
         if not self.silent: print 'Conv. PW shape: {}'.format(conv_pw.shape)
 
         layers = [tf.concat([conv_sw,conv_pw],1)] # join layers
-        
+
         # build dimensions to be sure we get this right        
         numel = int(layers[-1].shape[1]*layers[-1].shape[2]*layers[-1].shape[3])
         layers.append(tf.reshape(layers[-1],[-1,numel]))
         if not self.silent: print 'Flattened layer shape:',layers[-1].shape
-        
+
         ## FULLY CONNECTED LAYER (FC) GENERATOR ##
         # temporary variables for non-symmetry
         depth = [numel] + list(self.fc_depth)
@@ -354,7 +415,9 @@ class BuildModel:
         for i in xrange(self.fc_layers):
             layers.append(activation_fn(tf.matmul(layers[-1],W_fc[i]) + b_fc[i],
                           fn=self.fc_fn[i],dropout=self.fc_dropout[i]))
-            if not self.silent: print 'Layer {} fc output: {}'.format(i+1,layers[-1].shape)
+            if not self.silent: 
+                print 'Layer {} fc input: {}'.format(i+1,layers[-2].shape)
+                print 'Layer {} fc output: {}'.format(i+1,layers[-1].shape)
         
         ## TRAINING METHODS
         self.y_out = layers[-1]
@@ -362,14 +425,14 @@ class BuildModel:
         
         # hook for evaluating all the trained weights
         self.weights = [W_sw,W_pw,W_fc,b_fc]
-        
+    
         #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         
         # (re)-initialize all variables
         self.sess.run(self.reset_all_variables)       
 
-        print 'Finished!'        
+        if not self.silent: print 'Finished!'        
 
         
     def train(self):
@@ -381,7 +444,7 @@ class BuildModel:
         batches_per_epoch = int(len(self.train_data)/self.batch_size)
         num_steps = int(self.num_epochs * batches_per_epoch)
         
-        print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
+        if not self.silent: print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
 
         init = tf.global_variables_initializer()
 
@@ -399,8 +462,12 @@ class BuildModel:
             feed_dict = {self.train_x: batch_x, self.train_y: batch_y}
 
             _, batch_loss = self.sess.run([self.train_step, self.loss],feed_dict=feed_dict)
-            #print 'Batch loss:',batch_loss 
+            #_, batch_loss,y_out,W_sw,test,test2 = self.sess.run([self.train_step, self.loss, self.y_out,self.weights[0],self.test, self.test2],feed_dict=feed_dict)
+
             epoch_loss += batch_loss
+
+            # HUD for user
+            #print 'Batch loss:',batch_loss
 
             if (step % batches_per_epoch == 0):
 
@@ -420,15 +487,23 @@ class BuildModel:
                 epoch_loss = 0
                 
                 # randomize input data
+                seed = np.random.randint(1,1000000) # pick a random seed
+                np.random.seed(seed) # set identical seeds
+                np.random.shuffle(self.train_data) # shuffle data in place
+                np.random.seed(seed) # set identical seeds
+                np.random.shuffle(self.train_labels) # shuffle data in place
+
+
+                '''
                 together = np.concatenate((self.train_data,self.train_labels),axis=1)
                 np.random.shuffle(together)
                 self.train_data = together[:,:-1]
                 self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data
-                
-        print 'Final step {}: Batch loss ({})  /  Validation loss ({})'.format(step,epoch_loss,batch_loss_validation)
+                '''
 
-        print 'Training time: ', time.time() - start
-        print 'Finished!'
+        print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(epoch_loss,batch_loss_validation,time.time() - start)
+
+        if not self.silent: print 'Finished!'
         
         # stores logs of stepwise losses if needed later for saving model performance
         self.step_index,self.step_loss = step_index,step_loss 
@@ -472,13 +547,16 @@ class BuildModel:
         # create distance matrix
         assert self.train_data.shape[1:] == data.shape[1:],'Test and train data not the same shape (axis 1+).'
         
-        # create guesses for each string in data
-        guesses = []
 
-        feed_dict = {self.train_x: data}
-        guesses = self.sess.run(self.y_out,feed_dict=feed_dict)
+        # batch iterate over test data
+        guesses = np.zeros((len(data),1))
         
-        print 'Finished guessing!'
+        for i in xrange(0,len(data),500):
+            if not self.silent: print 'Starting batch prediction at index {}...'.format(i)
+            feed_dict = {self.train_x: data[i:i+self.batch_size,:]}
+            guesses[i:i+self.batch_size,:] = self.sess.run(self.y_out,feed_dict=feed_dict)
+        
+        if not self.silent: print 'Finished guessing!'
 
         return guesses
 
