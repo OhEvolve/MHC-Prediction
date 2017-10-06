@@ -78,7 +78,7 @@ def save_results(my_dict,silent=False):
     with open(fname, 'w') as f:
         pickle.dump(my_dict,f)
 
-
+    return fname
 
 
 """
@@ -130,6 +130,11 @@ def test(params,silent=False):
 
             m.fold_pick(j) # select a fold of data
             m.network_initialization() # initialized the network
+
+            # generate pretraining model guesses
+            #datasets_test.append((m.predict(m.test_data),m.test_labels))
+            #datasets_train.append((m.predict(m.train_data),m.train_labels))
+
             m.train() # train the network on selected fold
            
             # generate model guesses
@@ -153,9 +158,11 @@ def test(params,silent=False):
               }
 
     # save results to an unused file location, with settings metadata
-    save_results(results) 
+    fname = save_results(results) 
     print results['test_auroc']
     print results['train_auroc']
+
+    return fname 
     
     #visualize.comparison(test_dataset[0],k
 

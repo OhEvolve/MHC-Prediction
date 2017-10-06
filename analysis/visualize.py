@@ -39,18 +39,19 @@ def accuracy(guesses,actual,custom_params={}):
     # fix the axes
     plt.sca(ax)
 
-    # TODO: make params argument
-    actual_with_noise = actual + np.random.uniform(low=-1./(2*rounds),high=1./(2*rounds),size=actual.shape)
-
-    plt.scatter(guesses,actual_with_noise,c=actual,s=1,cmap='copper')
-    
     # fix the x-axis
-    for i in xrange(1,rounds):
-        plt.plot([0, 1], [(float(i)/(rounds-1)) - (1./(2*(rounds-1))) for _ in xrange(2)], 'k--')
+    if params['mode'] == 'attrition':
+        raw_input('HERE')
+        actual_with_noise = actual + np.random.uniform(low=-1./(2*rounds),high=1./(2*rounds),size=actual.shape)
+        plt.scatter(guesses,actual_with_noise,c=actual,s=1,cmap='copper')
+        for i in xrange(1,rounds):
+            plt.plot([0, 1], [(float(i)/(rounds-1)) - (1./(2*(rounds-1))) for _ in xrange(2)], 'k--')
+        ytick_labels = ['R'+str(i+1) for i in xrange(rounds)]
+        ytick_values = [(float(i)/(rounds-1)) for i in xrange(rounds)]
+        plt.yticks(ytick_values,ytick_labels)
+    else:
+        plt.scatter(guesses,actual)
 
-    ytick_labels = ['R'+str(i+1) for i in xrange(rounds)]
-    ytick_values = [(float(i)/(rounds-1)) for i in xrange(rounds)]
-    plt.yticks(ytick_values,ytick_labels)
 
     plt.title(params['title'])
     plt.xlabel(params['xlabel'])
@@ -200,7 +201,8 @@ def default_accuracy_params():
             'ylabel':'Last Observed Round of Selection',
             'fig':None,
             'ax':None,
-            'skip_show':True
+            'skip_show':True,
+            'mode':'attrition'
            }
 
 

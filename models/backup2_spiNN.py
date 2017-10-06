@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # homegrown libraries
+import load_data
 
 # library modifications
 random.seed(42)
@@ -63,8 +64,8 @@ def matmul_tensor(tensor):
 def split_tensor(tensor,axis=2):
     return tf.split(tensor,[1 for i in xrange(tensor.get_shape()[axis])],axis)
 
-def join_tensor(a,b,axis=1,axis2=2):
-    return tf.squeeze(tf.stack([a,b],axis=axis),axis=axis2)
+def join_tensor(a,b,axis=2):
+    return tf.squeeze(tf.stack([a,b],axis=axis),axis=3)
 
 # given any number of dicts, shallow copy and merge into a new dict, precedence goes to key value pairs in latter dicts.
 def merge_dicts(*dict_args):
@@ -76,18 +77,8 @@ def merge_dicts(*dict_args):
 # create a weight variable
 def weight_variable(shape):
     """Create a weight variable with appropriate initialization."""
-    initial = tf.truncated_normal(shape, stddev=1.0)
+    initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
-
-# create a weight constant 
-def ones_constant(shape):
-    """Create a weight variable with appropriate initialization."""
-    return tf.ones(shape,dtype=tf.float32)
-
-# create a weight constant 
-def zeros_constant(shape):
-    """Create a weight variable with appropriate initialization."""
-    return tf.zeros(shape,dtype=tf.float32)
 
 # create a bias variable
 def bias_variable(shape):
@@ -121,14 +112,14 @@ def activation_fn(inp,fn=None,dropout=1.0):
     return tf.nn.dropout(inp, dropout)
 
 def network_loss(y,y_real,W,params):
-    val = tf.constant(0.5) # make a quick float32 variable for shorter calls
+    val = tf.constant(1.0) # make a quick flaot32 variable for shorter calls
     # base loss
-    if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_sum(tf.abs(tf.subtract(y,y_real)))
-    elif params['loss_type'] == 'l2': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.nn.l2_loss(tf.subtract(y,y_real))
+    if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_mean(tf.abs(tf.subtract(y,y_real)))
+    if params['loss_type'] == 'l2': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.nn.l2_loss(tf.subtract(y,y_real))
     else: loss = 0
     # regularization loss
     if params['reg_type'] == 'l1': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.reduce_sum(tf.abs(w)) for w in W])
-    elif params['reg_type'] == 'l2': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.nn.l2_loss(w) for w in W])
+    if params['reg_type'] == 'l2': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.nn.l2_loss(w) for w in W])
     return loss
 
 
@@ -149,12 +140,13 @@ class BuildModel:
         # basically every parameter defined in one dictionary
         default_params = {
                          'data_augment':False,
+                         'learning_rate':0.01,
                          'data_normalization': False,
                          'silent': False,
                          'test_fraction': 0.1,
-                         'batch_size':1000,
+                         'batch_size':100,
                          'num_epochs':50,
-                         'learning_rate':1,
+                         'learning_rate':0.1,
                          'data_label':'A12',
                          # overall network parameters
                          'fc_layers':2,
@@ -210,8 +202,6 @@ class BuildModel:
             raw_seqs = [r.split(',')[0] for r in reader] 
             raw_labels = [float(r.split(',')[1]) for r in reader] 
 
-        assert len(raw_seqs) == len(raw_labels), 'Sequence count not same as label count'
-
         # get parameters out of data
         chars = ''.join(sorted(set(''.join(raw_seqs))))
         self.length = len(raw_seqs[0]) 
@@ -232,16 +222,20 @@ class BuildModel:
         self.all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1,1))
 
         # one-hot encoding (sitewise) -> there is no more pw split
-        self.all_data = np.zeros((len(raw_seqs),self.length),np.int)
-
-        # create all data
+        self.all_data_sw = np.zeros((
+            len(raw_seqs),
+            self.aa_count,
+            self.length),np.bool)
         for i,sample in enumerate(raw_seqs):
             for j,char in enumerate(sample):
-                try: self.all_data[i,j] = self.characters.index(char)
+                try: self.all_data_sw[i,self.characters.index(char),j] = 1
                 except ValueError: # this should never occur
                     raw_input('ERROR:' + self.characters + ' - ' + char)
 
-        if not self.silent: print 'Finished generating data!'
+        # save the information that matters
+        sw_dim = self.all_data_sw.shape
+        self.all_data = np.reshape(self.all_data_sw,(sw_dim[0],sw_dim[1]*sw_dim[2]))
+
 
     # model initialization
     def __init__(self,params = {}):
@@ -357,46 +351,65 @@ class BuildModel:
         
     def network_initialization(self):
 
+        #tf.reset_default_graph() # This breaks things last time I checked
+        
         if not self.silent: print 'Building model...'
         
         # initialize filters
-        # TODO: convert all to indexable matrix
-        W_sw = [[weight_variable((self.aa_count,)) for i in xrange(self.length)] for j in xrange(self.sw_depth)]
-        W_pw = [[weight_variable((self.aa_count,self.aa_count)) for i in xrange(self.pair_count)] for j in xrange(self.pw_depth)]
+        W_sw = weight_variable((self.aa_count,self.length,1,self.sw_depth))
+        W_pw = weight_variable((self.aa_count,self.aa_count,1,self.pair_count,self.pw_depth))
     
-        # Create pair indices for later
-        pairs = [(i,j) for i in xrange(0,self.length-1) for j in xrange(i+1,self.length)] # create list of pairs
-
         # TODO: Consider modifications that use less dense data types
         # Load data (this is now straight to _sw
-        self.train_x = tf.placeholder(tf.int64, shape=(None, self.length)) # full vector input
-        self.train_y = tf.placeholder(tf.float32, shape=(None, 1)) # full energy input
+        with tf.device('/cpu:0'):
+            self.train_x = tf.placeholder(tf.float32, shape=(None, self.aa_count*self.length)) # full vector input
+            self.train_y = tf.placeholder(tf.float32, shape=(None, 1)) # full energy input
 
-        # create sw/pw indices
-        input_sw = split_tensor(self.train_x,axis=1)
-        input_pw = [join_tensor(input_sw[i],input_sw[j]) for i,j in pairs]
+            # Sitewise build
+            x_image_sw = tf.reshape(self.train_x, [-1, self.aa_count, self.length, 1])
+
+            # Create pair indices for later
+            pairs = [(i,j) for i in xrange(0,self.length-1) for j in xrange(i+1,self.length)] # create list of pairs
+
+            # Pairwise build 
+            input_split = split_tensor(tf.squeeze(x_image_sw,axis=3),axis=2) # makes [(?,a),(?,a)...]
+            input_paired = [join_tensor(input_split[i],input_split[j]) for i,j in pairs] # makes [(?,a,2),(?,a,2)...]
+            input_matmul = matmul_tensor(input_paired) # makes [(?,a,a),(?,a,a)...]
+            x_image_pw = tf.stack(input_matmul,axis=1) # makes (?,a,a,l*(l-1)/2)
+            x_image_pw = tf.transpose(x_image_pw, [0, 2, 3, 1]) # makes (?,a,l*(l-1)/2,a)       
         
-        # create SW indexed system
-        output_sw = tf.stack([[tf.gather_nd(w,i) for w,i in zip(W,input_sw)] for W in W_sw],axis=1) # really hard to explain why there is a squared
+        # creating sitewise convolution
+        conv_sw_array = [float(self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
+                         for W_sw_layer in tf.split(W_sw,[1 for i in xrange(self.sw_depth)],3)
+                         for a,b in zip(tf.split(x_image_sw,[1 for i in xrange(self.length)],2),
+                                   tf.split(W_sw_layer,[1 for i in xrange(self.length)],1))]
+        conv_sw = tf.concat(conv_sw_array,1)   
 
-        # create PW indexed system
-        output_pw = tf.stack([[tf.gather_nd(w,i) for w,i in zip(W,input_pw)] for W in W_pw],axis=1)
+        if not self.silent: print 'Conv. SW shape: {}'.format(conv_sw.shape)
 
-        # reshape to expected layer type
-        output_sw_flat = tf.transpose(tf.contrib.layers.flatten(output_sw))
-        output_pw_flat = tf.transpose(tf.contrib.layers.flatten(output_pw))
-        layers = [tf.concat([output_sw_flat,output_pw_flat],1)] 
-        
+        # creating pairwise convolution
+        conv_pw_array = [(1.-self.sw_pw_ratio)*conv2d(a,b,stride=1,padding='VALID') 
+                         for W_pw_layer in tf.split(W_pw,[1 for i in xrange(self.pw_depth)],4) 
+                         for a,b in zip(tf.split(x_image_pw,[1 for i in xrange(self.pair_count)],3),
+                                   tf.split(tf.squeeze(W_pw_layer,[4]),[1 for i in xrange(self.pair_count)],3))]  
+        conv_pw = tf.concat(conv_pw_array,1)        
+    
+        if not self.silent: print 'Conv. PW shape: {}'.format(conv_pw.shape)
+
+        layers = [tf.concat([conv_sw,conv_pw],1)] # join layers
+
+        # build dimensions to be sure we get this right        
+        numel = int(layers[-1].shape[1]*layers[-1].shape[2]*layers[-1].shape[3])
+        layers.append(tf.reshape(layers[-1],[-1,numel]))
+        if not self.silent: print 'Flattened layer shape:',layers[-1].shape
+
         ## FULLY CONNECTED LAYER (FC) GENERATOR ##
         # temporary variables for non-symmetry
-        sw_size,pw_size = self.length*self.sw_depth,self.pair_count*self.pw_depth
-        depth = [sw_size + pw_size] + list(self.fc_depth)
+        depth = [numel] + list(self.fc_depth)
 
         # create weight/bias variables
         W_fc = [weight_variable([depth[i],depth[i+1]]) for i in xrange(self.fc_layers)]  
         b_fc = [bias_variable([depth[i+1]]) for i in xrange(self.fc_layers)]
-        #W_fc = [ones_constant([depth[i],depth[i+1]]) for i in xrange(self.fc_layers)]  
-        #b_fc = [zeros_constant([depth[i+1]]) for i in xrange(self.fc_layers)]
                               
         # iterate through fc_layers layers
         for i in xrange(self.fc_layers):
@@ -405,7 +418,6 @@ class BuildModel:
             if not self.silent: 
                 print 'Layer {} fc input: {}'.format(i+1,layers[-2].shape)
                 print 'Layer {} fc output: {}'.format(i+1,layers[-1].shape)
-
         
         ## TRAINING METHODS
         self.y_out = layers[-1]
@@ -414,20 +426,16 @@ class BuildModel:
         # hook for evaluating all the trained weights
         self.weights = [W_sw,W_pw,W_fc,b_fc]
     
-        #if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_sum(tf.abs(tf.subtract(y,y_real)))
         #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         
         # (re)-initialize all variables
-        #self.sess.run(self.reset_all_variables)       
-        init = tf.global_variables_initializer()
-        self.sess.run(init)
+        self.sess.run(self.reset_all_variables)       
 
         if not self.silent: print 'Finished!'        
 
         
     def train(self):
-    
         # start timer
         start = time.time()
 
@@ -438,11 +446,12 @@ class BuildModel:
         
         if not self.silent: print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
 
+        init = tf.global_variables_initializer()
+
+        self.sess.run(init)
+
         step_index,step_loss = [],[]
         epoch_loss = 0
-
-        w0,w1 = [0. for i in xrange(self.length)],[0. for i in xrange(self.length)]
-        for i in xrange(self.length): w1[i] = self.sess.run(self.weights[0][0][i])
 
         for step in xrange(num_steps):
             offset = (step * self.batch_size) % (self.train_data.shape[0] - self.batch_size)
@@ -450,47 +459,18 @@ class BuildModel:
             batch_x = self.train_data[offset:(offset + self.batch_size), :]
             batch_y = np.reshape(self.train_labels[offset:(offset + self.batch_size)],(self.batch_size,1))
 
-            for i in xrange(self.length): w1[i] = self.sess.run(self.weights[0][0][i])
-
             feed_dict = {self.train_x: batch_x, self.train_y: batch_y}
 
-            #preguess_y = self.sess.run(self.y_out,feed_dict=feed_dict)
-            #prebatch_loss = self.sess.run(self.loss,feed_dict=feed_dict)
-            #pretest = self.sess.run(self.test,feed_dict=feed_dict)
-            #guess_y = self.sess.run(self.y_out,feed_dict=feed_dict)
-            #test = self.sess.run(self.test,feed_dict=feed_dict)
-
-            _ = self.sess.run(self.train_step,feed_dict=feed_dict)
-            batch_loss = self.sess.run(self.loss,feed_dict=feed_dict)
+            _, batch_loss = self.sess.run([self.train_step, self.loss],feed_dict=feed_dict)
+            #_, batch_loss,y_out,W_sw,test,test2 = self.sess.run([self.train_step, self.loss, self.y_out,self.weights[0],self.test, self.test2],feed_dict=feed_dict)
 
             epoch_loss += batch_loss
 
-
             # HUD for user
-            ''' 
-            for i in xrange(self.length): w0[i] = self.sess.run(self.weights[0][0][i])
-            for i in xrange(self.length): print 'diff W -',str(i+1),':',w0[i] - w1[i]
-            print ''
-            for i in xrange(self.length): print 'Wpre -',str(i+1),':',w1[i]
-            print ''
-            for i in xrange(self.length): print 'Wpost -',str(i+1),':',w0[i]
-            print ''
-            print 'Batch X:',batch_x
-            print 'Actual\n:',batch_y
-            print 'Pre-guess\n:',preguess_y
-            print 'Guess\n:',guess_y
-            print 'Pre-Loss:',prebatch_loss
-            print 'Loss:',batch_loss
-            #print 'Pre-Test\n:',pretest
-            #print 'Test:\n',test
-            print '\n'
-            #w1 = w0[:] 
-            '''#'''
-            
+            #print 'Batch loss:',batch_loss
 
             if (step % batches_per_epoch == 0):
 
-                
                 epoch_loss /= 0.01*batches_per_epoch*self.batch_size
                 
                 feed_dict = {self.train_x: self.test_data, self.train_y: self.test_labels}
@@ -559,25 +539,23 @@ class BuildModel:
         return i+1 # return index of model file for later reference
 
     def predict(self,data=[]):
-
         # if no inputs are specified, use the defaults
         if len(data) == 0:
             print 'No data input to be predicted, using test data!'
             data = self.test_data
-        else:
-            pass
         
         # create distance matrix
         assert self.train_data.shape[1:] == data.shape[1:],'Test and train data not the same shape (axis 1+).'
+        
 
         # batch iterate over test data
         guesses = np.zeros((len(data),1))
         
-        for i in xrange(0,len(data),self.batch_size):
+        for i in xrange(0,len(data),500):
             if not self.silent: print 'Starting batch prediction at index {}...'.format(i)
             feed_dict = {self.train_x: data[i:i+self.batch_size,:]}
             guesses[i:i+self.batch_size,:] = self.sess.run(self.y_out,feed_dict=feed_dict)
-
+        
         if not self.silent: print 'Finished guessing!'
 
         return guesses

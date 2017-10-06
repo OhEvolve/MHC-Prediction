@@ -24,6 +24,7 @@ def main(args):
     for command in args['commands']:
         # Fake data testing
         if command == 'f':
+
             print 'Generated data testing protocol starting...'
             test = simulate.Landscape()
             test.define_landscape()
@@ -31,12 +32,18 @@ def main(args):
 
             model_params = default_model_params()
             model_params['data_label'] = test.data_label
-            single_model.test(model_params)
+            results_fname = single_model.test(model_params)
+                        
+            post_params= default_post_params() 
+            post_params['results_fname'] = results_fname 
+            post_params['mode'] = 'enrichment'
+            post_params['data_label'] = 'Test data' 
+            post.start(post_params,graphing=False) 
 
         # Testing protocol
         if command == 't':
             print 'Testing protocol starting...'
-            model_params = default_model_params()
+            model_param = default_model_params()
             single_model.test(model_params)
              
         # Model build test
@@ -50,30 +57,33 @@ def main(args):
         if command == 'p':
             print 'Results analytics protocol starting...'
 
+            '''
             results_dict = {'A12': 'results_100016.p',
                             'F3':  'results_100024.p',
                             '5cc7':'results_100025.p',
                             '226': 'results_100023.p'}
+            '''
+
+            results_dict = {'test':'results_100035.p'}
 
             for k,v in results_dict.items():
                 post_params= default_post_params() 
                 post_params['results_fname'] = v
                 post_params['data_label'] = k
-                post.start(post_params,graphing=True) 
+                post.start(post_params,graphing=False) 
 
         if command == 'd':
             print 'Data processing protocol starting...'
 
             model_params = default_model_params()
-            model_params['num_epochs'] = 5 
+            model_params['num_epochs'] = 25 
             pre_params = default_pre_params()
             pre_params['mode'] = 'attrition'
 
-            #for sets in ['A12','F3','5cc7','226']:
-            for sets in ['A12']:
+            #for sets in ['A12']:
+            for sets in ['A12','F3','5cc7','226']:
 
                 print 'Starting data set {}...'.format(sets)
-                
 
                 model_params['data_label'] = sets
                 pre_params['data_label'] = sets
@@ -114,33 +124,36 @@ def default_post_params():
 def default_model_params():
     return { 
         # testing settings
-        'repeats':3,
+        'repeats':1,
         # simulation settings
         'data_augment':False,
-        'data_normalization': True,
+        'data_normalization': False, # probably definitely change back to True
         'silent': True,
         'test_fraction': 0.2,
-        'batch_size':1000,
-        'num_epochs':50,
-        'learning_rate':1,
-        'data_label':'A12',
+        'batch_size':256,
+        'num_epochs':10,
+        'learning_rate':0.5,
+        'data_label':'test',
         # overall network parameters
         'model_type':'spinn',
-        'fc_layers':2,
-        'sw_pw_ratio':0.25, # relative weight of sw branch relative to pw branch (range -> [0,1])
+        'sw_pw_ratio':0.5, # relative weight of sw branch relative to pw branch (range -> [0,1])
         # sitewise/pairwise parameters
         'pw_depth':1,
         'sw_depth':1,
         # fully connected parameters
-        'fc_depth':(8,1),
-        'fc_fn':('linear','linear'),
-        'fc_dropout':(1.0,1.0),
+        'fc_layers':1,
+        'fc_depth':(1,),
+        'fc_fn':('linear',),
+        'fc_dropout':(1.0,),
+        #'fc_depth':(8,1),
+        #'fc_fn':('linear','linear'),
+        #'fc_dropout':(1.0,1.0),
         # loss parameters
         'loss_type':'l2',
         'loss_magnitude':1.0,
         # regularization parameters
-        'reg_type':'l1',
-        'reg_magnitude':0.00001
+        'reg_type':'l2',
+        'reg_magnitude':0.00000001
         }
 
 """ namespace catch if called as script (which it should) """ 

@@ -68,7 +68,10 @@ class Landscape:
         Seperate so you can recurrently call new sequences from same landscape
         """
         self.sw_landscape = np.random.normal(0,self.sw_mag,(self.length,self.aa_count))        
+        #self.sw_landscape = np.array([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,1,0,0,0],[0,0,0,1,0,0],[0,0,0,0,1,0]])
         self.pw_landscape = np.random.normal(0,self.pw_mag,(self.length-1,self.length-1,self.aa_count**2))        
+        #self.pw_landscape = np.zeros((self.length-1,self.length-1,self.aa_count**2))        
+        #self.pw_landscape[:,:,0] = 1
 
     def generate_sequences(self,count=None,unique_count=None):
         # Quick access to the number of sequences you want
