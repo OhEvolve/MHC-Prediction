@@ -146,7 +146,7 @@ def test(params,silent=False):
             scores_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1]))
 
             ## NOTE: to save memory, I am *not* going to save models in general runs, but this is something to change
-            m.save_model()
+            #m.save_model()
         
     # creates a results dictionary, pickles it in logs folder
     results = {

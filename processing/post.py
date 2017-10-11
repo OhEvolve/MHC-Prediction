@@ -26,7 +26,7 @@ Inputs
         label - [str], which folder to look for data in
 """
 
-def start(params, graphing=True):
+def single(params, graphing=True):
 
     default_params = defaults()
     params = append_dicts(params,default_params)
@@ -90,6 +90,59 @@ def start(params, graphing=True):
         plt.close()
 
 
+def batch(params, specific_dicts = None, graphing = True):
+
+    # search for whether simulations are completed or not
+    print 'Loading all files...'
+    log_dir = './logs'
+    all_files = [log_dir+'/'+i for i in os.listdir(log_dir) 
+            if os.path.isfile(os.path.join(log_dir,i)) and 'results_' in i]
+
+    all_results = []
+    for f in all_files:
+        try: all_results.append(pickle.load(open(f,'r')))
+        except ValueError: print 'Skipped:',f
+    
+    # initialize some variables
+    test_aurocs,train_aurocs = [],[]
+
+    # check through pickled files and save results (if matching specific dict)
+    print 'Shuffling through files...'
+    for result in all_results:
+        if specific_dicts == None or result['model_settings'] in specific_dicts: 
+            test_aurocs.append(result['test_auroc'])
+            train_aurocs.append(result['train_auroc'])
+        else:
+            print 'Skipping...'
+
+    #
+    x,y = [np.mean(t) for t in test_aurocs],[np.mean(t) for t in train_aurocs]
+    xerr,yerr = [np.std(t) for t in test_aurocs],[np.std(t) for t in train_aurocs]
+
+    # Find top score
+    ind = x.index(max(x))
+    print 'Top scoring:'
+    print 'Train: {} +- {}'.format(x[ind],xerr[ind])
+    print 'Test: {} +- {}'.format(y[ind],yerr[ind])
+    print '- Model parameters -'
+    print all_results[ind]['model_settings']
+
+    if graphing:
+        # Start graphical component
+        plt.figure()
+        plt.errorbar(x,y,xerr,yerr,fmt='o', ecolor='g', capthick=2)
+        plt.title('Grid search results')
+        plt.xlabel('Training auROC')
+        plt.ylabel('Testing auROC')
+
+        plt.show(block=False)
+        raw_input('Press enter to close...')
+        plt.close()
+
+    else:
+        # Update user
+        for a1,a2,b1,b2 in zip(x,xerr,y,yerr):
+            print 'Diff: {}'.format(b1-a1)
 
 #####################
 ## FACTORY METHODS ##

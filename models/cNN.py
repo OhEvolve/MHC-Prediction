@@ -126,7 +126,7 @@ class BuildModel:
                          'conv_padding':('SAME','SAME'),
                          # max pool parameters
                          'pool_stride':(2,2),
-                         'pool_filter_width':(2,2),
+                         'pool_filter_width':(3,3),
                          'pool_padding':('SAME','SAME'),
                          # fully connected parameters
                          'fc_depth':(16,1),
@@ -140,6 +140,8 @@ class BuildModel:
                          'reg_magnitude':0.01,
                          }
         
+        self.model_parameters = default_params.keys()
+
         # apply all changes
         self.update_model(default_params)
 
@@ -164,6 +166,7 @@ class BuildModel:
         
         # set all default parameters
         self.default_model()
+        tf.reset_default_graph()
         
         # check to see if there is an update
         if params:
@@ -174,17 +177,18 @@ class BuildModel:
         print 'Initializing neural network data acquisition...'
         
         # load data parameters
-        data = load_data.LoadData(self.data_label)
-        self.__dict__.update(data.params)
-        self.all_data_sw = data.data_array_sw # load all variables
-        self.all_labels = data.label_array
+        #data = load_data.LoadData(self.data_label) # OLD
+        #self.__dict__.update(data.params)
+        #self.all_data_sw = data.data_array_sw # load all variables
+        #self.all_labels = data.label_array
+        self.load_data()
         
         # 
-        self.sw_dim = self.all_data_sw.shape # save dimensions of original data
+        #self.sw_dim = self.all_data_sw.shape # save dimensions of original data
  
         # verified reduction of dimension (flatten) and merging
-        self.all_data = np.reshape(self.all_data_sw,
-                                          (self.sw_dim[0],self.sw_dim[1]*self.sw_dim[2]))
+        #self.all_data = np.reshape(self.all_data_sw,
+        #                                  (self.sw_dim[0],self.sw_dim[1]*self.sw_dim[2]))
          
         # update on model parameters
         if not self.silent:
@@ -203,9 +207,48 @@ class BuildModel:
         print 'Initializing variables...'
         self.sess = tf.Session(config=config)
         
-    '''
-    Formats data prior to model execution (separate into train and test sets)
-    '''
+    def load_data(self):
+
+        # open file and store lines
+        with open('./data/{}.txt'.format(self.data_label),'rb') as txtfile:
+            reader = txtfile.readlines()
+            raw_seqs = [r.split(',')[0] for r in reader] 
+            raw_labels = [float(r.split(',')[1]) for r in reader] 
+
+        assert len(raw_seqs) == len(raw_labels), 'Sequence count not same as label count'
+
+        # get parameters out of data
+        chars = ''.join(sorted(set(''.join(raw_seqs))))
+        self.length = len(raw_seqs[0]) 
+        self.aa_count = len(chars)
+        self.characters = chars 
+        self.sequence_count = len(raw_seqs)
+        self.pair_count = (self.length*(self.length-1))/2        
+
+        if not self.silent:
+            print 'Loaded data with following parameters:'
+            print ' > File location:','./data/{}.txt'.format(self.data_label)
+            print ' > Peptide length:',self.length
+            print ' > AA count:',self.aa_count
+            print ' > Character list:',self.characters
+            print ' > Samples:',self.sequence_count
+
+        # always make label array
+        self.all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1,1))
+
+        # one-hot encoding (sitewise) -> there is no more pw split
+        self.all_data = np.zeros((len(raw_seqs),self.aa_count,self.length),np.int)
+
+        # create all data
+        for i,sample in enumerate(raw_seqs):
+            for j,char in enumerate(sample):
+                try: self.all_data[i,self.characters.index(char),j] = 1
+                except ValueError: # this should never occur
+                    raw_input('ERROR:' + self.characters + ' - ' + char)
+
+        if not self.silent: print 'Finished generating data!'
+
+    """ Formats data prior to model execution (separate into train and test sets) """ 
     def fold_data(self,params = {}):
         # check to see if there is an update
         if params:
@@ -218,8 +261,9 @@ class BuildModel:
         self.fold_total = int(1/self.test_fraction)
         
         # randomize data order
-        self.order = np.arange(0,self.all_data.shape[0])
-        self.limits = [i*int(self.test_fraction*self.all_data.shape[0]) for i in xrange(self.fold_total+1)]
+        self.order = np.arange(0,self.sequence_count)
+        self.limits = [i*int(self.test_fraction*self.sequence_count) 
+                for i in xrange(self.fold_total+1)]
         np.array(random.shuffle(self.order))
 
         print '{} folds generated, fold {} arbitrary picked.'.format(self.fold_total,1)
@@ -244,8 +288,8 @@ class BuildModel:
         o_not = np.delete(self.order,np.arange(self.limits[lim],self.limits[lim+1]),0)
         
         # split data into training and testing        
-        self.train_data = self.all_data[o_not,:]
-        self.test_data = self.all_data[o,:]
+        self.train_data = self.all_data[o_not,:,:]
+        self.test_data = self.all_data[o,:,:]
         self.train_labels = self.all_labels[o_not,:]
         self.test_labels = self.all_labels[o,:]
 
@@ -260,8 +304,8 @@ class BuildModel:
     
     def set_fold(self,order = [],order_not = []):
         if len(order) > 0 and len(order_not) > 0:
-            self.train_data = self.all_data[order,:]
-            self.test_data = self.all_data[order_not,:]
+            self.train_data = self.all_data[order,:,:]
+            self.test_data = self.all_data[order_not,:,:]
             self.train_labels = self.all_labels[order,:]
             self.test_labels = self.all_labels[order_not,:]
         
@@ -270,23 +314,20 @@ class BuildModel:
         
     def network_initialization(self):
         
-        tf.reset_default_graph()
-        
         print 'Building model...'
         
         # create placeholder variables, and format data
-        self.train_x = tf.placeholder(tf.float32, shape=(None, self.sw_dim[1]*self.sw_dim[2])) # full vector input
+        self.train_x = tf.placeholder(tf.float32, shape=(None, self.aa_count,self.length)) 
         self.train_y = tf.placeholder(tf.float32, shape=(None, 1)) # full energy input
         layers = [tf.reshape(self.train_x, [-1, self.aa_count, self.length, 1])]
         
                   
         ## CONVOLUTIONAL LAYER (CNN) GENERATOR ##
         # temporary variables for non-symmetry
-        height = self.sw_dim[1]
         width,depth = list(self.conv_filter_width),[1] + list(self.conv_depth)
 
         # create weight variables
-        W = [weight_variable([height,width[i],depth[i],depth[i+1]]) for i in xrange(self.cnn_layers)]        
+        W = [weight_variable([self.aa_count,width[i],depth[i],depth[i+1]]) for i in xrange(self.cnn_layers)]        
 
         # iterate through conv./pool layers
         for i in xrange(self.cnn_layers):
@@ -371,11 +412,17 @@ class BuildModel:
 
                 epoch_loss = 0
                 # randomize input data
-                together = np.concatenate((self.train_data,self.train_labels),axis=1)
-                np.random.shuffle(together)
-                self.train_data = together[:,:-1]
-                self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data  
-                
+                seed = np.random.randint(1,1000000) # pick a random seed
+                np.random.seed(seed) # set identical seeds
+                np.random.shuffle(self.train_data) # shuffle data in place
+                np.random.seed(seed) # set identical seeds
+                np.random.shuffle(self.train_labels) # shuffle data in place
+
+                #together = np.concatenate((self.train_data,self.train_labels),axis=1)
+                #np.random.shuffle(together)
+                #self.train_data = together[:,:-1]
+                #self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) 
+                 
         print 'Training time: ', time.time() - start
         print 'Finished!'
         

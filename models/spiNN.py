@@ -105,10 +105,6 @@ def max_pool(x, stride=2, filter_size=2, padding='SAME'):
         filter_size,stride = [1, filter_size, filter_size, 1],[1, stride, stride, 1]
     return tf.nn.max_pool(x, ksize=filter_size,strides=stride, padding=padding)
 
-# NOTE: probably not used?
-def cross_entropy(y, y_real, W1=None,W2=None,W1fc=None,W2fc=None,modifications=['NONE'],loss_type='NONE',loss_coeff=0):
-    return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y, y_real))
-
 # activation_fn
 def activation_fn(inp,fn=None,dropout=1.0):
     if fn == 'relu': return tf.nn.dropout(tf.nn.relu(inp), dropout)
@@ -273,15 +269,16 @@ class BuildModel:
         if not self.silent: print 'Finished acquisition!'
         
         # Create GPU configuration
-        config = tf.ConfigProto()
+        #config = tf.ConfigProto() # use this to set to GPU
+        config = tf.ConfigProto(device_count = {'GPU':0}) # use this to set to CPU
+
         config.log_device_placement = False # super verbose mode
-        config.gpu_options.allow_growth = True
+        #config.gpu_options.allow_growth = True
         #config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
         # Start tensorflow engine
         print 'Initializing variables...'
         self.sess = tf.Session(config=config)
-        self.reset_all_variables = tf.global_variables_initializer()
         
     def fold_data(self,params = {}):
         # updates parameters
@@ -377,16 +374,16 @@ class BuildModel:
         input_pw = [join_tensor(input_sw[i],input_sw[j]) for i,j in pairs]
         
         # create SW indexed system
-        output_sw = tf.stack([[tf.gather_nd(w,i) for w,i in zip(W,input_sw)] for W in W_sw],axis=1) # really hard to explain why there is a squared
+        output_sw = tf.stack([[self.sw_pw_ratio*tf.gather_nd(w,i) for w,i in zip(W,input_sw)] for W in W_sw],axis=1) # really hard to explain why there is a squared
 
         # create PW indexed system
-        output_pw = tf.stack([[tf.gather_nd(w,i) for w,i in zip(W,input_pw)] for W in W_pw],axis=1)
+        output_pw = tf.stack([[(1.-self.sw_pw_ratio)*tf.gather_nd(w,i) for w,i in zip(W,input_pw)] for W in W_pw],axis=1)
 
         # reshape to expected layer type
-        output_sw_flat = tf.transpose(tf.contrib.layers.flatten(output_sw))
-        output_pw_flat = tf.transpose(tf.contrib.layers.flatten(output_pw))
+        output_sw_flat = tf.contrib.layers.flatten(tf.transpose(output_sw,[2,1,0]))
+        output_pw_flat = tf.contrib.layers.flatten(tf.transpose(output_pw,[2,1,0]))
         layers = [tf.concat([output_sw_flat,output_pw_flat],1)] 
-        
+
         ## FULLY CONNECTED LAYER (FC) GENERATOR ##
         # temporary variables for non-symmetry
         sw_size,pw_size = self.length*self.sw_depth,self.pair_count*self.pw_depth
@@ -414,17 +411,24 @@ class BuildModel:
         # hook for evaluating all the trained weights
         self.weights = [W_sw,W_pw,W_fc,b_fc]
     
+        self.set_learning_fn()
         #if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_sum(tf.abs(tf.subtract(y,y_real)))
-        #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
-        self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
         
         # (re)-initialize all variables
-        #self.sess.run(self.reset_all_variables)       
         init = tf.global_variables_initializer()
         self.sess.run(init)
 
         if not self.silent: print 'Finished!'        
 
+    def set_learning_fn(self,learning_rate=None):
+
+        if learning_rate == None: # set learning rate to default if not specified
+            learning_rate = self.learning_rate 
+
+        ### Choose your learning method ###
+        #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
+        #self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
+        self.train_step = tf.train.ProximalGradientDescentOptimizer(learning_rate).minimize(self.loss) # why does this print?
         
     def train(self):
     
@@ -439,57 +443,22 @@ class BuildModel:
         if not self.silent: print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
 
         step_index,step_loss = [],[]
-        epoch_loss = 0
+        epoch_loss,step,learning_rate_mod = 0,0,1.0
+        finished = False
 
-        w0,w1 = [0. for i in xrange(self.length)],[0. for i in xrange(self.length)]
-        for i in xrange(self.length): w1[i] = self.sess.run(self.weights[0][0][i])
-
-        for step in xrange(num_steps):
+        while not finished: 
             offset = (step * self.batch_size) % (self.train_data.shape[0] - self.batch_size)
 
+            # split data
             batch_x = self.train_data[offset:(offset + self.batch_size), :]
             batch_y = np.reshape(self.train_labels[offset:(offset + self.batch_size)],(self.batch_size,1))
 
-            for i in xrange(self.length): w1[i] = self.sess.run(self.weights[0][0][i])
-
+            # train and log batch loss
             feed_dict = {self.train_x: batch_x, self.train_y: batch_y}
-
-            #preguess_y = self.sess.run(self.y_out,feed_dict=feed_dict)
-            #prebatch_loss = self.sess.run(self.loss,feed_dict=feed_dict)
-            #pretest = self.sess.run(self.test,feed_dict=feed_dict)
-            #guess_y = self.sess.run(self.y_out,feed_dict=feed_dict)
-            #test = self.sess.run(self.test,feed_dict=feed_dict)
-
-            _ = self.sess.run(self.train_step,feed_dict=feed_dict)
-            batch_loss = self.sess.run(self.loss,feed_dict=feed_dict)
-
+            _,batch_loss = self.sess.run([self.train_step,self.loss],feed_dict=feed_dict)
             epoch_loss += batch_loss
 
-
-            # HUD for user
-            ''' 
-            for i in xrange(self.length): w0[i] = self.sess.run(self.weights[0][0][i])
-            for i in xrange(self.length): print 'diff W -',str(i+1),':',w0[i] - w1[i]
-            print ''
-            for i in xrange(self.length): print 'Wpre -',str(i+1),':',w1[i]
-            print ''
-            for i in xrange(self.length): print 'Wpost -',str(i+1),':',w0[i]
-            print ''
-            print 'Batch X:',batch_x
-            print 'Actual\n:',batch_y
-            print 'Pre-guess\n:',preguess_y
-            print 'Guess\n:',guess_y
-            print 'Pre-Loss:',prebatch_loss
-            print 'Loss:',batch_loss
-            #print 'Pre-Test\n:',pretest
-            #print 'Test:\n',test
-            print '\n'
-            #w1 = w0[:] 
-            '''#'''
-            
-
-            if (step % batches_per_epoch == 0):
-
+            if (step % batches_per_epoch == batches_per_epoch - 1):
                 
                 epoch_loss /= 0.01*batches_per_epoch*self.batch_size
                 
@@ -513,13 +482,25 @@ class BuildModel:
                 np.random.seed(seed) # set identical seeds
                 np.random.shuffle(self.train_labels) # shuffle data in place
 
-
                 '''
                 together = np.concatenate((self.train_data,self.train_labels),axis=1)
                 np.random.shuffle(together)
                 self.train_data = together[:,:-1]
                 self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data
                 '''
+            # add one to step 
+            step += 1
+
+            # create early exist conditions
+            if step >= num_steps: # check if at threshold of learning steps
+                finished = True
+            if np.isnan(batch_loss): # check if training has spiraled into NaN space
+                step = 0
+                learning_rate_mod *= 0.5
+                init = tf.global_variables_initializer()
+                self.sess.run(init)
+                self.set_learning_fn(self.learning_rate*learning_rate_mod)
+                print 'Lowering learning rate and restarting...'
 
         print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(epoch_loss,batch_loss_validation,time.time() - start)
 
@@ -534,8 +515,7 @@ class BuildModel:
         Attempts to store all useful information about the trained model in a log file, which will
         be unique from any any other model file
         """
-
-        # tries to find a model log path that does not exist
+# tries to find a model log path that does not exist
         for i in xrange(10001,100001):
             fname = './logs/spinn_model_{}.p'.format(i+1)
             if not os.path.exists(fname): break
