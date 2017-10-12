@@ -144,9 +144,10 @@ def main(args):
             print 'Reduced task count from {} to {}.'.format(all_dicts_count,len(all_dicts))
             time.sleep(1.0)
             
+            from multiprocessing import Pool
             pool = Pool(processes=8) # creates a worker pool equal to the number of cores
-            print pool._processes
-            time.sleep(3.0)
+            # fn: single_model.test(params)
+            # all_dicts: [params1,params2,...]
             tasks = pool.map_async(single_model.test,all_dicts).get(9999999)
             tasks.wait()
             
