@@ -1,0 +1,6 @@
+EDCEG,[[0]]
+HGFCD,[[1]]
+EDBCB,[[2]]
+ABCDE,[[3]]
+FDBCD,[[4]]
+AAACB,[[5]]

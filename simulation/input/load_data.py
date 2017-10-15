@@ -18,13 +18,13 @@ import numpy as np
 def load_data(fname,**kwargs):
     # allow user to modify particular parameters
     options = {'silent':False, 
-               'input_type':'one-hot'}
+               'encoding':'one-hot'}
     options.update(kwargs) # update options with user input
 
     # make some assertions about what the user options are now
-    accepted_input_types = ('one-hot','numerical')
-    assert options['input_type'] in accepted_input_types,  \
-            '{} not in accepted input types {}'.format(options['input_type'],accepted_input_types)
+    accepted_encodings = ('one-hot','numerical')
+    assert options['encoding'] in accepted_encodings,  \
+            '{} not in accepted input types {}'.format(options['encoding'],accepted_encodings)
 
     # try to find file in multiple contexts
     if os.path.isfile(fname): pass
@@ -57,14 +57,14 @@ def load_data(fname,**kwargs):
     # always make label array
     all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1,1))
 
-    if options['input_type'] == 'one-hot':
+    if options['encoding'] == 'one-hot':
         # one-hot encoding (sitewise)
         all_data = np.zeros((params['sequence_count'],params['aa_count'],params['length']),np.int)
         for i,sample in enumerate(raw_seqs):
             for j,char in enumerate(sample):
                 all_data[i,params['characters'].index(char),j] = 1
 
-    elif options['input_type'] == 'numerical':
+    elif options['encoding'] == 'numerical':
         # numerical encoding
         all_data = np.zeros((params['sequence_count'],params['length']),np.int)
         for i,sample in enumerate(raw_seqs): # go across sequences

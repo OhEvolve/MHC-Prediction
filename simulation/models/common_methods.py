@@ -74,18 +74,3 @@ def activation_fn(inp,fn=None,dropout=1.0):
     return tf.nn.dropout(inp, dropout)
 
 
-def network_loss(y,y_real,W,params):
-    """ Generates a network loss function given y/y_real and regularization parameters """ 
-    val = tf.constant(1.0) # make a quick float32 variable for shorter calls
-
-    # base loss
-    if params['loss_type'] == 'l1': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.reduce_sum(tf.abs(tf.subtract(y,y_real)))
-    elif params['loss_type'] == 'l2': loss = params['loss_magnitude']*(val/tf.cast(tf.size(y),tf.float32))*tf.nn.l2_loss(tf.subtract(y,y_real))
-    else: loss = 0
-
-    # regularization loss
-    if params['reg_type'] == 'l1': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.reduce_sum(tf.abs(w)) for w in W])
-    elif params['reg_type'] == 'l2': loss += params['reg_magnitude']*tf.reduce_sum([(val/tf.cast(tf.size(w),tf.float32))*tf.nn.l2_loss(w) for w in W])
-    return loss
-
-
