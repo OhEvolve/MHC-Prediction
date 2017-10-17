@@ -12,11 +12,18 @@ import time
 import numpy as np
 
 # homegrown libraries
+from common_methods import *
 
+### FACTORY METHODS ###
+def ceildiv(a, b):
+    ''' ceiling division ''' 
+    return -(-a // b)
 
 def train_nn(model,data,**kwargs):
     # allow user to modify particular parameters
     options = {'silent':False,
+               'learning_rate':1.0,
+               'learning_mode':'gradientdescent',
                'loss_type':'l2',
                'loss_magnitude':1,
                'reg_type':'l2',
@@ -26,62 +33,71 @@ def train_nn(model,data,**kwargs):
 
     options.update(kwargs) # update options with user input
 
-    # make some assertions about what the user options are now
+    # if data is submitted not as a dictionary, change
+    if type(data) in [tuple,list] and len(data) == 2: data = {'training': data}
+
+    # check assertions 
+    model_reqs = ['loss','reset_variables','train_x','train_y','sess'] 
+    assert all([a in dir(model) for a in model_reqs]), 'Model missing necessary attributes'
+    assert len(data['training'][0]) == len(data['training'][1]),'Training data not balanced'
 
     # start timer
     start = time.time()
 
-    batches_per_epoch = len(train_data)/options['batch_size']
+    # create train step
+    train_step = set_learning_fn(
+            model.loss,options['learning_rate'],options['learning_mode'])
+
+    # map parameters into training and testing data initializations
+    sample_count = len(data['training'][0])
+    batches_per_epoch = ceildiv(sample_count,options['batch_size'])
     num_steps = options['num_epochs']*batches_per_epoch
 
+    # alert user
     if not options['silent']: 
         print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
 
-    step_loss = []
-    epoch_loss,step,learning_rate_mod = 0,0,1.0
+    step_loss = [] # log storage
+    step,learning_mod = 0,1.0
+
+    epoch_loss,validation_loss = 0.,None
     finished = False
 
     while not finished: 
-        offset = (step * self.batch_size) % (train_data.shape[0] - self.batch_size)
+        offset = (step % batches_per_epoch) * options['batch_size']
 
         # split data
-        batch_x = train_data[0][offset:(offset + options['batch_size'])]
-        batch_y = train_data[1][offset:(offset + options['batch_size'])]
+        batch_x = data['training'][0][offset:(offset + options['batch_size'])]
+        batch_y = data['training'][1][offset:(offset + options['batch_size'])]
 
         # train and log batch loss
         feed_dict = {model.train_x: batch_x, model.train_y: batch_y}
-        _,batch_loss = self.sess.run([self.train_step,self.loss],feed_dict=feed_dict)
+        _,batch_loss = model.sess.run([train_step,model.loss],feed_dict=feed_dict)
         epoch_loss += batch_loss
 
-        if (step % batches_per_epoch == batches_per_epoch - 1):
+        if (step % batches_per_epoch == 0) and step = 0:
             
-            epoch_loss /= 0.01*batches_per_epoch*self.batch_size
-            
-            feed_dict = {self.train_x: test_data[0], self.train_y: test_labels[1]}
-            batch_loss_validation = self.sess.run(self.loss,feed_dict=feed_dict)
-            batch_loss_validation /= 0.01*self.test_data.shape[0]
+            if 'testing' in data.keys(): # calculate testing set loss
+                feed_dict = {model.train_x: data['testing'][0], model.train_y: data['testing'][1]}
+                validation_loss = model.sess.run(model.loss,feed_dict=feed_dict)/len(data['testing'][0])
 
-            step_loss.append((step,epoch_loss,batch_loss_validation))
+            epoch_loss /= sample_count
+
+            step_loss.append((step,epoch_loss,validation_loss))
             
             # Gives readout on model
-            if not self.silent: 
-                print 'Step {}: Batch loss ({})  /  Validation loss ({})'.format(step,epoch_loss,batch_loss_validation)
+            if not options['silent']: 
+                print 'Step {}: Batch loss ({})  /  Validation loss ({})'.format(
+                        step,epoch_loss,validation_loss)
 
             epoch_loss = 0
             
             # randomize input data
             seed = np.random.randint(1,1000000) # pick a random seed
-            np.random.seed(seed) # set identical seeds
-            np.random.shuffle(self.train_data) # shuffle data in place
-            np.random.seed(seed) # set identical seeds
-            np.random.shuffle(self.train_labels) # shuffle data in place
+            for ind in xrange(2):
+                np.random.seed(seed) # set identical seeds
+                np.random.shuffle(data['training'][ind]) # shuffle data in place
 
-            '''
-            together = np.concatenate((self.train_data,self.train_labels),axis=1)
-            np.random.shuffle(together)
-            self.train_data = together[:,:-1]
-            self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data
-            '''
         # add one to step 
         step += 1
 
@@ -89,19 +105,19 @@ def train_nn(model,data,**kwargs):
         if step >= num_steps: # check if at threshold of learning steps
             finished = True
         if np.isnan(batch_loss): # check if training has spiraled into NaN space
-            step = 0
-            learning_rate_mod *= 0.5
-            init = tf.global_variables_initializer()
-            self.sess.run(init)
-            self.set_learning_fn(self.learning_rate*learning_rate_mod)
-            print 'Lowering learning rate and restarting...'
+            learning_mode *= 0.5
+            init,step = model.reset_variables(),0
+            model.sess.run(init)
+            train_step = set_learning_fn(
+                    model.loss,options['learning_rate'],learning_mod*options['learning_mode'])
+            if not options['silent']: print 'Lowering learning rate and restarting...'
 
-    print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(epoch_loss,batch_loss_validation,time.time() - start)
+    print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(
+            epoch_loss,validation_loss,time.time() - start)
 
-    if not self.silent: print 'Finished!'
+    if not options['silent']: print 'Finished!'
     
     # stores logs of stepwise losses if needed later for saving model performance
-    self.step_index,self.step_loss = step_index,step_loss 
         
 
 
@@ -113,3 +129,4 @@ def train_knn(data,**kwargs):
     options.update(kwargs) # update options with user input
 
     # make some assertions about what the user options are now
+    pass

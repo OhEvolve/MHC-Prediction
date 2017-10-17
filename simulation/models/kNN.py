@@ -26,7 +26,6 @@ import random
 # nonstandard libraries
 import matplotlib.pyplot as plt
 import numpy as np
-import load_data
 
 '''
 Test Function (runs if called as script)

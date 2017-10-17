@@ -8,30 +8,29 @@ Function: Generates specified neural network architecture (data agnostic)
 Author: Patrick V. Holec
 '''
 
+
+
 # standard libaries
-import math
-import time
 import random
 import os
-import pickle
 
 # nonstandard libraries
 import tensorflow as tf
-import matplotlib.pyplot as plt
 import numpy as np
 
 # homegrown libraries
 from common_methods import *
 import default_parameters
 
-# library modifications
 
+'''
+Main Call Function
+'''
 
 def main():
-
+    """ Mild testing function """
     model = BuildModel()
-    model.network_initialization()
-    
+        
 
 '''
 Main Class Method
@@ -39,7 +38,9 @@ Main Class Method
 
 
 class BuildModel:
-    
+  
+
+
     def default_model(self):
         """ Pulls a default parameter list and applies parameters to model """
         # basically every parameter defined in one dictionary
@@ -50,7 +51,8 @@ class BuildModel:
         for key, value in default_params.items():
             setattr(self, key, value)
 
-    # use a dictionary to update class attributes
+
+
     def update_model(self,params={}):
         """ Updates model attributes after passing a dictionary """
         # updates parameters
@@ -65,6 +67,8 @@ class BuildModel:
         # checks for adequete coverage
         assert len(self.fc_depth) >= self.fc_layers,'Entries in depth less than number of fc layers.'
 
+
+
     def count_trainable_parameters(self):
         """
         Return the total number of trainable parameters in the model, 
@@ -72,8 +76,9 @@ class BuildModel:
         """
         return np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]) 
         
-    # model initialization
-    def __init__(self,params = {}):
+
+
+    def __init__(self,*args):
         """ Initialize class, potentially with specified parameters """ 
 
         # print version numbers that matter
@@ -82,39 +87,41 @@ class BuildModel:
         # set all default parameters, potentially replace
         self.default_model()
 
+        # update model with potentially new values
+        for arg in args: 
+            self.update_model(arg)
+
         # clear TF graph, modify TF's verbosity
         self.clear_graph()
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        
-    def clear_graph():
+    
+
+
+    def clear_graph(self):
         """ Clear graph, be sure its actually clear """ 
         tf.reset_default_graph()
 
-    def reset_variables():
+
+
+    def reset_variables(self):
         """ Resets variables on graph, using given random seed """ 
         tf.set_random_seed(self.seed)
-        tf.global_variables_initializer()
-    
-    def network_initialization(self,params={}):
+        self.sess.run(tf.global_variables_initializer())
+
+
+
+    def network_initialization(self,*args):
         """ Constructs new network given current parameters """
 
         # update model with potentially new values
-        self.update_model(params)
-
-        # Choose whether to use CPU or GPU, configure devices
-        if 'tf_device' == 'CPU': 
-            config = tf.ConfigProto(device_count = {'GPU':0}) # use this to set to CPU
-        elif 'tf_device' == 'GPU': 
-            config = tf.ConfigProto() # use this to set to GPU
-            config.log_device_placement = False # super verbose mode
-            config.gpu_options.allow_growth = True
+        for arg in args:
+            self.update_model(arg)
 
         # clear TF graph
         self.clear_graph()
 
         # Start tensorflow engine
-        print 'Initializing variables...'
-        self.sess = tf.Session(config=config)
+        self.sess = start_tf_engine(self.tf_device)
 
         if not self.silent: print 'Building model...'
         
@@ -157,7 +164,7 @@ class BuildModel:
 
         # create weight/bias variables
         W_fc = [normal_variable([depth[i],depth[i+1]]) for i in xrange(self.fc_layers)]  
-        b_fc = [bias_variable([depth[i+1]]) for i in xrange(self.fc_layers)]
+        b_fc = [uniform_variable([depth[i+1]]) for i in xrange(self.fc_layers)]
                               
         # iterate through fc_layers layers
         for i in xrange(self.fc_layers):
@@ -170,99 +177,31 @@ class BuildModel:
         
         ## TRAINING METHODS
         self.y_out = layers[-1]
-        self.weights = {'SP':[W_sw,W_pw],'FC':[W_fc,b_fc]}
+        self.weights = {'sitewise':W_sw,
+                        'pairwise':W_pw,
+                        'w_fc':W_fc,
+                        'b_fc':b_fc}
+        
+        # define loss function
+        self.loss = loss(tf.subtract(self.y_out,self.train_y),
+                         loss_type = self.loss_type,
+                         loss_magnitude = self.loss_magnitude,
+                         silent = self.silent,
+                         normalize = False)
+
+        self.loss += loss(self.weights,
+                         loss_type = self.reg_type,
+                         loss_magnitude = self.reg_magnitude,
+                         silent = self.silent,
+                         normalize = True)
+
+        # initialize variable
+        self.reset_variables()
 
         # Alert user
         if not self.silent: print 'Finished!'        
 
-    def set_learning_fn(self,learning_rate=None):
 
-        if learning_rate == None: # set learning rate to default if not specified
-            learning_rate = self.learning_rate 
-
-        ### Choose your learning method ###
-        #self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
-        #self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.loss) # why does this print?
-        self.train_step = tf.train.ProximalGradientDescentOptimizer(learning_rate).minimize(self.loss) # why does this print?
-        
-    def train(self):
-    
-        # start timer
-        start = time.time()
-
-        # training via iterative epochs
-        
-        batches_per_epoch = int(len(self.train_data)/self.batch_size)
-        num_steps = int(self.num_epochs * batches_per_epoch)
-        
-        if not self.silent: print 'Batchs per epoch - {} / Number of steps - {}'.format(batches_per_epoch,num_steps)
-
-        step_index,step_loss = [],[]
-        epoch_loss,step,learning_rate_mod = 0,0,1.0
-        finished = False
-
-        while not finished: 
-            offset = (step * self.batch_size) % (self.train_data.shape[0] - self.batch_size)
-
-            # split data
-            batch_x = self.train_data[offset:(offset + self.batch_size), :]
-            batch_y = np.reshape(self.train_labels[offset:(offset + self.batch_size)],(self.batch_size,1))
-
-            # train and log batch loss
-            feed_dict = {self.train_x: batch_x, self.train_y: batch_y}
-            _,batch_loss = self.sess.run([self.train_step,self.loss],feed_dict=feed_dict)
-            epoch_loss += batch_loss
-
-            if (step % batches_per_epoch == batches_per_epoch - 1):
-                
-                epoch_loss /= 0.01*batches_per_epoch*self.batch_size
-                
-                feed_dict = {self.train_x: self.test_data, self.train_y: self.test_labels}
-                batch_loss_validation = self.sess.run(self.loss,feed_dict=feed_dict)
-                batch_loss_validation /= 0.01*self.test_data.shape[0]
-
-                step_index.append(step)
-                step_loss.append((epoch_loss,batch_loss_validation))
-                
-                # Gives readout on model
-                if not self.silent: 
-                    print 'Step {}: Batch loss ({})  /  Validation loss ({})'.format(step,epoch_loss,batch_loss_validation)
-
-                epoch_loss = 0
-                
-                # randomize input data
-                seed = np.random.randint(1,1000000) # pick a random seed
-                np.random.seed(seed) # set identical seeds
-                np.random.shuffle(self.train_data) # shuffle data in place
-                np.random.seed(seed) # set identical seeds
-                np.random.shuffle(self.train_labels) # shuffle data in place
-
-                '''
-                together = np.concatenate((self.train_data,self.train_labels),axis=1)
-                np.random.shuffle(together)
-                self.train_data = together[:,:-1]
-                self.train_labels = np.reshape(together[:,-1],(self.train_labels.shape[0],1)) # need to add dimension to data
-                '''
-            # add one to step 
-            step += 1
-
-            # create early exist conditions
-            if step >= num_steps: # check if at threshold of learning steps
-                finished = True
-            if np.isnan(batch_loss): # check if training has spiraled into NaN space
-                step = 0
-                learning_rate_mod *= 0.5
-                init = tf.global_variables_initializer()
-                self.sess.run(init)
-                self.set_learning_fn(self.learning_rate*learning_rate_mod)
-                print 'Lowering learning rate and restarting...'
-
-        print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(epoch_loss,batch_loss_validation,time.time() - start)
-
-        if not self.silent: print 'Finished!'
-        
-        # stores logs of stepwise losses if needed later for saving model performance
-        self.step_index,self.step_loss = step_index,step_loss 
         
     def save_model(self,silent=False):
 

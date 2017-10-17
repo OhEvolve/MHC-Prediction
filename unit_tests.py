@@ -7,6 +7,7 @@ author: PVH
 """
 
 #  standard libraries
+import os
 import unittest
 
 # nonstandard libraries
@@ -15,7 +16,8 @@ import tensorflow as tf
 
 # homegrown libraries
 from simulation.input import *
-from simulation.training.common_methods import *
+from simulation.training import *
+from simulation.models import *
 
 # library modifications
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -68,26 +70,53 @@ class TestInputFunctions(unittest.TestCase):
     def test_fold_data(self):
         # load sample data, attempt fold split
         data,params = load_data('sample.txt',silent=True)
-        test,train = fold_data(data,fold_index=2,fold_count=5)
+        data_folded = fold_data(data,fold_index=2,fold_count=5)
 
         # unit tests
-        self.assertEqual(len(test[0]),len(test[1]),20)
-        self.assertEqual(len(train[0]),len(train[1]),80)
+        self.assertEqual(len(data_folded['testing'][0]),len(data_folded['testing'][1]),20)
+        self.assertEqual(len(data_folded['training'][0]),len(data_folded['training'][1]),80)
         
 
 class TestTrainingFunctions(unittest.TestCase):
-    
+
+    # Method is now in /models, also check for dictionary support 
+    """
     def test_common_methods(self):
         tensor = tf.constant([[3,2],[-1,1]],dtype=tf.float32)
         
         with tf.Session() as sess:
-            result_l1 = sess.run(loss(tensor,loss_type='l1',loss_magnitude=1))
-            result_l2 = sess.run(loss(tensor,loss_type='l2',loss_magnitude=1))
+            result_l1 = sess.run(common_methods.loss(tensor,loss_type='l1',loss_magnitude=1))
+            result_l2 = sess.run(common_methods.loss(tensor,loss_type='l2',loss_magnitude=1))
 
         self.assertEqual(result_l1,1.75)
         self.assertEqual(result_l2,1.875)
+    """
 
-    def 
+    def test_training(self):
+        
+        # generate model
+        model = spiNN.BuildModel()
+
+        # load data and initialize architecture
+        data,params = load_data('test.txt',encoding='numerical',silent=True)
+
+        add_params = {'num_epochs':50,
+                      'reg_magnitude':0.01}
+
+        model.network_initialization(params,add_params)
+        data_folded = fold_data(data,fold_index=0,fold_count=5)
+
+        # train model
+        train_nn(model,data_folded)
+        model.reset_variables() 
+        
+class TestTestingFunction(unittest.TestCase):
+
+    def test_single_model(self):
+        
+        data,params = load_data('test.txt',encoding='numerical',silent=True)
+        single_model(params)
+
 
 if __name__ == '__main__':
     print 'Starting unit tests on input functions...\n'
@@ -98,4 +127,6 @@ if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestTrainingFunctions)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
-
+    print 'Starting unit tests on training functions...\n'
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestTestingFunctions)
+    unittest.TextTestRunner(verbosity=2).run(suite)

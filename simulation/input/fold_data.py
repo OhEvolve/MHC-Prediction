@@ -35,7 +35,11 @@ def fold_data(data,**kwargs):
     wd1,fd,wd2 = np.split(data[0],[start,stop],axis=0)
     wl1,wl,wl2 = np.split(data[1],[start,stop],axis=0)
     
+    # result
+    data_fold = {'testing':(fd,wl),
+                 'training':(np.concatenate((wd1,wd2),axis=0),np.concatenate((wl1,wl2),axis=0))}
+
     # returns (fold, remaining data)
-    return (fd,wl),(np.concatenate((wd1,wd2),axis=0),np.concatenate((wl1,wl2),axis=0))
+    return data_fold
 
 

@@ -6,6 +6,7 @@ author: PVH
 """
 
 #  standard libraries
+import collections
 
 # nonstandard libraries
 import tensorflow as tf
@@ -16,6 +17,12 @@ import tensorflow as tf
 """
 FACTORY METHODS
 """
+
+def flatten(x):
+    if type(x) in [list,tuple]:
+        return [a for i in x for a in flatten(i)]
+    else:
+        return [x]
 
 def split_tensor(tensor,axis=2):
     """ Splits input tensor across given axis into 1D slices """
@@ -44,7 +51,7 @@ def zeros_constant(shape):
     return tf.zeros(shape,dtype=tf.float32)
 
 
-def constant_variable(shape,value=0.0):
+def uniform_variable(shape,value=0.0):
     """Create a variable initialized to specific value """
     initial = tf.constant(value, shape=shape)
     return tf.Variable(initial)
@@ -72,5 +79,57 @@ def activation_fn(inp,fn=None,dropout=1.0):
     elif fn == 'linear': return tf.nn.dropout(inp,dropout)
     elif type(fn) == str: print '{} function not recognized, using default ({})...'.format(fn,'linear')
     return tf.nn.dropout(inp, dropout)
+
+
+def start_tf_engine(mode):
+    # Choose whether to use CPU or GPU, configure devices
+    if mode == 'CPU': 
+        config = tf.ConfigProto(device_count = {'GPU':0}) # use this to set to CPU
+    elif mode == 'GPU': 
+        config = tf.ConfigProto() # use this to set to GPU
+        config.log_device_placement = False # super verbose mode
+        config.gpu_options.allow_growth = True
+    else:
+        print 'No config given, defaulting to CPU...'
+        config = tf.ConfigProto(device_count = {'GPU':0})
+
+    # Start tensorflow engine, and send out
+    return tf.Session(config=config)
+
+
+def loss(y,**kwargs):
+    """ Predefined loss function construction method """ 
+    # allow user to modify particular parameters
+    options = {'silent':False,
+               'loss_type':'l2',
+               'loss_magnitude':1,
+               'normalize':1}
+    options.update(kwargs) # update options with user input
+
+    # check on some types 
+
+    if type(y) == dict: # convert dictionary entries into list of tensors
+        y = flatten(y.values())
+    elif type(y) != list: 
+        y = [y] # convert single entry into list of tensors
+    else:
+        y = flatten(y)
+
+    # base loss
+    dtype = tf.float32
+    loss_total,norm = tf.constant(0,dtype=dtype),tf.constant(1,dtype=dtype)
+    for i in y:
+        if options['normalize'] == True: 
+            norm = tf.size(i,out_type=dtype)
+        else: 
+            norm = tf.constant(1,dtype=dtype) 
+
+        if options['loss_type'] == 'l1': 
+            loss_total += options['loss_magnitude']*tf.cast(tf.reduce_sum(tf.abs(i)),dtype=dtype)/norm
+        elif options['loss_type'] == 'l2': 
+            loss_total += options['loss_magnitude']*tf.cast(tf.nn.l2_loss(i),dtype=dtype)/norm
+
+    # returns summed total
+    return loss_total
 
 

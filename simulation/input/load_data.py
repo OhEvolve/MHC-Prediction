@@ -55,7 +55,7 @@ def load_data(fname,**kwargs):
         for k,v in params.items(): print ' > {} : {}'.format(k,v)
 
     # always make label array
-    all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1,1))
+    all_labels = np.reshape(np.array(raw_labels),(len(raw_labels),1))
 
     if options['encoding'] == 'one-hot':
         # one-hot encoding (sitewise)
