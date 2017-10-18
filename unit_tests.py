@@ -1,5 +1,4 @@
 
-
 """ 
 file: /simulation/unit_tests.py 
 function: perform unit tests on all available functions to ensure function 
@@ -17,6 +16,7 @@ import tensorflow as tf
 # homegrown libraries
 from simulation.input import *
 from simulation.training import *
+from simulation.testing import *
 from simulation.models import *
 
 # library modifications
@@ -110,13 +110,19 @@ class TestTrainingFunctions(unittest.TestCase):
         train_nn(model,data_folded)
         model.reset_variables() 
         
-class TestTestingFunction(unittest.TestCase):
+class TestTestingFunctions(unittest.TestCase):
 
     def test_single_model(self):
         
-        data,params = load_data('test.txt',encoding='numerical',silent=True)
-        single_model(params)
+        data,params = load_data('A12.txt',encoding='numerical',silent=False)
+        params = {
+                 'data_label':'A12.txt',
+                 'num_epochs':100,
+                 'reg_magnitude':0.0001
+                 }
 
+        results = single_model(params)
+        print results['auroc'] 
 
 if __name__ == '__main__':
     print 'Starting unit tests on input functions...\n'

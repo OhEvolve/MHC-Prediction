@@ -16,6 +16,8 @@ import numpy as np
 
 # homemade libraries
 from common_methods import *
+from simulation.input import *
+from simulation.output import *
 
 """
 Factory Methods
@@ -45,23 +47,36 @@ def single_model(*args,**kwargs):
     # load data and initialize architecture
     data,params = load_data(options['data_label'],
                             encoding=run_settings['encoding'],
-                            silent=options['silent')
+                            silent=options['silent'])
 
-    model.network_initialization(options)
+    model.network_initialization(options,params)
+
+    # initialize results
+    results = {
+              'auroc':[]
+              }
 
     # for each requested repeat (no need to save since we are just doing this for one model)
-    for r in options['repeats']:
+    for r in xrange(options['repeats']):
+
         # randomize data each repeat
-        data = randomize_data(silent=options['silent'])
+        data = randomize_data(data,silent=options['silent'])
+
         for f in xrange(options['fold_count']):
+
             # select a fold of data
-            data_folded = fold_data(data,fold_index=i,fold_count=options['fold_count'])
-            train_nn(model,data_folded)
-            # TODO: save!
+            data_folded = fold_data(data,fold_index=f,fold_count=options['fold_count'])
+
+            # train neural network on training fold 
+            choose_training(model,data_folded,run_settings['type'])
+            
+            # save auroc score for given repeat,fold
+            results['auroc'].append(auroc_score(model,data_folded['testing']))
+
+            # reset variables in model
             model.reset_variables() 
              
-
-    # train model
+    return results
 
 
 def merge_dicts(*dict_args):

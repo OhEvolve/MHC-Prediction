@@ -75,7 +75,7 @@ def train_nn(model,data,**kwargs):
         _,batch_loss = model.sess.run([train_step,model.loss],feed_dict=feed_dict)
         epoch_loss += batch_loss
 
-        if (step % batches_per_epoch == 0) and step = 0:
+        if (step % batches_per_epoch == 0) and not step == 0:
             
             if 'testing' in data.keys(): # calculate testing set loss
                 feed_dict = {model.train_x: data['testing'][0], model.train_y: data['testing'][1]}

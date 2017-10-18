@@ -233,17 +233,7 @@ class BuildModel:
         return i+1 # return index of model file for later reference
 
     def predict(self,data=[]):
-
-        # if no inputs are specified, use the defaults
-        if len(data) == 0:
-            print 'No data input to be predicted, using test data!'
-            data = self.test_data
-        else:
-            pass
         
-        # create distance matrix
-        assert self.train_data.shape[1:] == data.shape[1:],'Test and train data not the same shape (axis 1+).'
-
         # batch iterate over test data
         guesses = np.zeros((len(data),1))
         

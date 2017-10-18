@@ -42,7 +42,8 @@ def load_data(fname,**kwargs):
 
     # get parameters out of data
     chars = ''.join(sorted(set(''.join(raw_seqs))))
-    params = {'data_location':fname,
+    params = {'data_label':fname, # TODO: maybe make a more formal decision here
+              'data_location':fname,
               'length':len(raw_seqs[0]),
               'aa_count':len(chars),
               'characters':chars,
