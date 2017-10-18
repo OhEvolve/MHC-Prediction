@@ -1,8 +1,8 @@
 
 
 """ 
-file: /testing/single_model.py 
-function: test a single parameter set 
+file: /testing/batch_model.py 
+function: perform unit tests on all available functions to ensure function 
 author: PVH
 """
 
@@ -23,7 +23,7 @@ from simulation.output import *
 Factory Methods
 """
 
-def single_model(*args,**kwargs):
+def batch_model(*args,**kwargs):
 
     """ Tests a single collection of parameters """ 
     
@@ -57,30 +57,62 @@ def single_model(*args,**kwargs):
               'weights':{}
               }
 
+    data_folds =  {}
 
-    # for each requested repeat (no need to save since we are just doing this for one model)
+    # pregenerate data to save space
     for r in xrange(options['repeats']):
-
+        
         # randomize data each repeat
         data = randomize_data(data,silent=options['silent'])
 
         for f in xrange(options['fold_count']):
 
             # select a fold of data
-            data_folded = fold_data(data,fold_index=f,fold_count=options['fold_count'])
-
-            # train neural network on training fold 
-            choose_training(model,data_folded,run_settings['type'])
+            data_folds[(r,f)] = fold_data(data,fold_index=f,fold_count=options['fold_count'])
             
-            # save auroc score for given repeat,fold
-            results['auroc'].append(auroc_score(model,data_folded['testing']))
-            results['weights'].append(dict([(k,model.sess.run(w)) for w in model.weights]))
+    for params in all_params:
 
-            # reset variables in model
-            model.reset_variables() 
-             
-    return results
+        results = {
+                  'auroc':[],
+                  'weights':{}
+                  }
 
+        # for each requested repeat/fold 
+        for r in xrange(options['repeats']):
+
+            for f in xrange(options['fold_count']):
+
+                # train neural network on training fold 
+                choose_training(model,data_folds[(r,f)],run_settings['type'])
+                
+                # save auroc score for given repeat,fold
+                results['auroc'].append(auroc_score(model,data_folded['testing']))
+                results['weights'].append(dict([(k,model.sess.run(w)) for w in model.weights]))
+
+                # reset variables in model
+                model.reset_variables() 
+                 
+        save_results(my_dict,options['silent'])
+
+def save_results(my_dict,silent=False):
+    """
+    Finds unused namespace and pickles dictionary
+    """
+    # check if path exists, create if not
+    if not os.path.exists('./logs'):
+        print '/logs not found, making new directory...'
+        os.makedirs('./logs')
+    # tries to find a model log path that does not exist
+    for i in xrange(100001,1000001):
+        fname = './logs/results_{}.p'.format(i+1)
+        if not os.path.exists(fname): break
+    if not silent: print 'Creating log file as: {}'.format(fname) # alert user
+
+    # pickle file
+    with open(fname, 'w') as f:
+        pickle.dump(my_dict,f)
+
+    return fname
 
 def merge_dicts(*dict_args):
     """

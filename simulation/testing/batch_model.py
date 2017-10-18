@@ -1,64 +1,183 @@
 
-#!/usr/bin/env python
 
-'''
-model_test.py
+""" 
+file: /testing/batch_model.py 
+function: perform unit tests on all available functions to ensure function 
+author: PVH
+"""
 
-/testing module
 
-'''
 
 # standard libraries
+import random
 import time
 import pickle
 import os
+from multiprocessing.dummy import Pool as ThreadPool
 
 # nonstandard libraries
 import numpy as np
 
-# personal libraries
-from models import * # libraries: kNN,cNN,spiNN
-from analysis import * # libraries: visualize,statistics
-from landscape import generate_test_set as gts,parameterize_data as pd,compile_data as cd
+# homemade libraries
+from common_methods import *
+from simulation.input import *
+from simulation.output import *
+
 
 
 """
 Factory Methods
 """
 
-def merge_dicts(*dict_args):
-    """
-    Given any number of dicts, shallow copy and merge into a new dict,
-    precedence goes to key value pairs in latter dicts.
-    """
-    result = {}
-    for dictionary in dict_args:
-        result.update(dictionary)
-    return result
+def batch_model(all_params,*args,**kwargs):
+    
+    # allow user to modify particular parameters
+    options = {
+              'silent': False,
+              'thread_count': 4
+              } 
 
-def append_dicts(old_dict,*dict_args):
-    """
-    Given an original dictionary and any number of additional dicts, adds
-    new entries to original if they are not already present
-    """
-    for dictionary in dict_args:
-        for key in dictionary.keys():
-            if not key in old_dict.keys():
-                print 'Adding parameter: {} -> {}'.format(key,dictionary[key])
-                old_dict[key] = dictionary[key]
-    return old_dict
+    for arg in args: options.update(arg) # update with input dictionaries
+    options.update(kwargs) # update with keyword arguments
+    
+    # assertion check
 
-def data_prep(scores,shape):
-    """
-    Attempts to interpret a list of score sets prior to plotting
-    """ 
-    auroc = np.reshape([np.mean(s) for s in scores],shape)
-    std = np.reshape([np.std(s) for s in scores],shape)
-    return auroc,std
+    # create thread classes specific to each exclusionary parameter
+    exclusion_dict = {}
+    exclusion_keys = ['model_type','data_label','fold_count','repeats']
+
+    if not options['silent']: print 'Starting exclusion splitting...'
+
+    for params in all_params:
+        
+        exclusion_values = tuple([params[key] for key in exclusion_keys if key in params.keys()])
+
+        if not exclusion_values in exclusion_dict.keys():
+            exclusion_dict[exclusion_values] = [params] 
+        else:
+            exclusion_dict[exclusion_values].append(params)
+
+    exclusion_usage = [(k,[len(v),1]) for k,v in exclusion_dict.items()] 
+    
+    # if we have more threads than exclusionary classes, divide and conquer
+    if options['thread_count'] > len(exclusion_dict):
+
+        # go through each excess thread and assign to group in need
+        for i in xrange(options['thread_count'] - len(exclusion_dict)):
+            sorted(exclusion_usage, key=lambda x: x[1][0]/x[1][1])
+            exclusion_usage[-1][1][1] += 1 
+
+    # assign parameters to groups
+    all_params_exclusion = []
+    for (k,v) in exclusion_usage:
+        random.shuffle(exclusion_dict[k])
+        for p in partition(exclusion_dict[k],v[1]):
+            all_params_exclusion.append({
+                                       'params_list': p,
+                                       'options': dict([(key,params[key]) for key in exclusion_keys 
+                                            if key in exclusion_dict[k][0].keys()])
+                                    })
+
+
+    print 'Starting the following threads:'
+    for i,p in enumerate(all_params_exclusion):
+        print ' >',i+1,':',len(p['params_list'])
+   
+    time.sleep(1.0)
+
+    # create a thread pool, and pass through threads 
+    pool = ThreadPool(options['thread_count']) 
+
+    results = pool.map(multiple_model,all_params_exclusion)
+            
+
+def multiple_model(batch_params):
+
+    """ Tests a single collection of parameters """ 
+    """ Pass model parameters, then exclusionary parameters """ 
+
+    # allow user to modify particular parameters
+    options = {'silent':False,
+               'repeats':1,
+               'fold_count':5,
+               'model_type':'spinn',
+               'data_label':'test.txt'}
+
+    options.update(batch_params['options']) # update with input dictionaries
+
+    # assertions check
+    
+
+    # generate model
+
+    model,run_settings = choose_model(options['model_type']) 
+
+    # load data and initialize architecture
+    data,data_params = load_data(options['data_label'],
+                            encoding=run_settings['encoding'],
+                            silent=options['silent'])
+
+    # initialize results
+    results = {
+              'auroc':[],
+              'weights':{}
+              }
+
+    data_folds =  {}
+
+    # pregenerate data to save space
+    for r in xrange(options['repeats']):
+        
+        # randomize data each repeat
+        data = randomize_data(data,silent=options['silent'])
+
+        for f in xrange(options['fold_count']):
+
+            # select a fold of data
+            data_folds[(r,f)] = fold_data(data,fold_index=f,fold_count=options['fold_count'])
+
+
+    # single model at a time simulation 
+    for params in batch_params['params_list']:
+
+        results = {
+                  'auroc':[],
+                  'weights':{},
+                  'params':{}
+                  }
+
+        model.network_initialization(data_params,params)
+
+        # for each requested repeat/fold 
+        for r in xrange(options['repeats']):
+
+            for f in xrange(options['fold_count']):
+
+                # train neural network on training fold 
+                choose_training(model,data_folds[(r,f)],run_settings['type'])
+                
+                # save auroc score for given repeat,fold
+                results['auroc'].append(auroc_score(model,data_folds[(r,f)]['testing']))
+                results['weights'] = dict([(k,model.sess.run(w)) for k,w in model.weights.items()])
+
+                # reset variables in model
+                model.reset_variables() 
+                 
+
+        results['params'] = params
+        save_results(results,options['silent'])
+
+
 
 """
-Helper Methods
+Helper Functions
 """
+
+def partition(lst, n): 
+    """ Splits a list in n nearly equal parts """
+    division = len(lst) / float(n) 
+    return [ lst[int(round(division * i)): int(round(division * (i + 1)))] for i in xrange(n) ]
+
 
 def save_results(my_dict,silent=False):
     """
@@ -80,91 +199,6 @@ def save_results(my_dict,silent=False):
 
     return fname
 
-
-"""
-Testing Methods
-"""
-
-def test(params_list,silent=False):
-    """
-    Generates a model as defined by settings dictionary and attempts
-    to resolve a predictive auROC across each independent fold
-    """
-    # create test specific dictionaries
-    default_params = {
-                    'repeats':1,
-                     }
-
-    # append dictionary with default systemic parameters (i.e. fixed order, fold design)
-    settings = append_dicts(params,default_params) 
-
-    # initialize variables 
-    scores_test,scores_train = [],[]
-    datasets_test,datasets_train = [],[] # lists for storing (guesses,labels) for each type
-
-    # declare model type, calls the right model function
-    # DONE: add branch weight to spiNN system
-    if settings['model_type'] == 'knn':
-        print 'Starting kNN model...'
-        m = kNN.BuildModel(settings)
-    if settings['model_type'] == 'cnn':
-        print 'Starting cNN model...'
-        m = cNN.BuildModel(settings)
-    if settings['model_type'] == 'spinn':
-        print 'Starting spiNN model...'
-        m = spiNN.BuildModel(settings)
-
-
-    # removed the fold matching procedure (possible useful, maybe not)
-    
-    for i in xrange(settings['repeats']): # iterate across declared repeats
-        
-        print 'Starting repeat {}...'.format(i+1)
-
-        # folds the data by parameter specifications
-        m.fold_data()
-
-        for j in xrange(m.fold_total): # iterate across all data folds
-
-            print 'Starting fold {}...'.format(j+1)
-
-            m.fold_pick(j) # select a fold of data
-            m.network_initialization() # initialized the network
-
-            # generate pretraining model guesses
-            #datasets_test.append((m.predict(m.test_data),m.test_labels))
-            #datasets_train.append((m.predict(m.train_data),m.train_labels))
-
-            m.train() # train the network on selected fold
-           
-            # generate model guesses
-            datasets_test.append((m.predict(m.test_data),m.test_labels))
-            datasets_train.append((m.predict(m.train_data),m.train_labels))
-
-            # generate and store auROC scores 
-            scores_test.append(statistics.auroc(datasets_test[-1][0],datasets_test[-1][1]))
-            scores_train.append(statistics.auroc(datasets_train[-1][0],datasets_train[-1][1]))
-
-            ## NOTE: to save memory, I am *not* going to save models in general runs, but this is something to change
-            #m.save_model()
-        
-    # creates a results dictionary, pickles it in logs folder
-    results = {
-              'test_auroc':scores_test,
-              'train_auroc':scores_train,
-              'test_dataset':datasets_test,
-              'train_dataset':datasets_train,
-              'model_settings':settings
-              }
-
-    # save results to an unused file location, with settings metadata
-    fname = save_results(results) 
-    print results['test_auroc']
-    print results['train_auroc']
-
-    return fname 
-    
-    #visualize.comparison(test_dataset[0],k
 
 
 

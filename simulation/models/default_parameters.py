@@ -32,7 +32,7 @@ def spinn():
                      'reg_type':'l2',
                      'reg_magnitude':0.01,
                      # system parameters 
-                     'silent': False,
+                     'silent': True,
                      'tf_device':'CPU',
                      'seed':random.randrange(99999999)
                      }

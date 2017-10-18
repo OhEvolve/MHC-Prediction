@@ -93,7 +93,7 @@ class TestTrainingFunctions(unittest.TestCase):
     """
 
     def test_training(self):
-        
+        return None 
         # generate model
         model = spiNN.BuildModel()
 
@@ -113,16 +113,25 @@ class TestTrainingFunctions(unittest.TestCase):
 class TestTestingFunctions(unittest.TestCase):
 
     def test_single_model(self):
-        
-        data,params = load_data('A12.txt',encoding='numerical',silent=False)
+
+        return None
+
         params = {
                  'data_label':'A12.txt',
-                 'num_epochs':100,
-                 'reg_magnitude':0.0001
+                 'num_epochs':50,
+                 'reg_magnitude':0.01
                  }
 
         results = single_model(params)
+
         print results['auroc'] 
+
+    def test_batch_model(self):
+        
+        all_params = generate_dicts(default = True)
+        batch_model(all_params,thread_count = 12)
+        print 'Finished!'
+
 
 if __name__ == '__main__':
     print 'Starting unit tests on input functions...\n'
