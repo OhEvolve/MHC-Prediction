@@ -57,13 +57,6 @@ def library_clustering(*args,**kwargs):
             'last_round':[s[2] for s in seqs_temp]
            }
 
-    N = len(info['seqs'])
-    print 'Sequence count:', N 
-
-    print info['seqs'][0:10]
-    print info['read_count'][0:10]
-    print info['last_round'][0:10]
-
     # heavy plotly stuff
 
     edges,edge_width = [],[]
@@ -75,18 +68,27 @@ def library_clustering(*args,**kwargs):
                 edge_width.append(h)
     
     print 'Edge count:', len(edges)
+    print 'Sequence count:',len(info['seqs'])
+   
+    #graph2D(label,info,edges)
+    graph3D(label,info,edges)
 
+def graph3D(label,info,edges): 
     # Start putting together graph
-    G = ig.Graph(edges,directed = False) 
-
     labels,group = info['seqs'],info['last_round']
+    N = len(info['seqs'])
+
+    G = ig.Graph(edges,directed = False) 
+    G.add_vertices(N)
 
     layt=G.layout('kk', dim=3)
 
     Xn=[layt[k][0] for k in range(N)]# x-coordinates of nodes
     Yn=[layt[k][1] for k in range(N)]# y-coordinates
     Zn=[layt[k][2] for k in range(N)]# z-coordinates
+
     Xe,Ye,Ze = [],[],[]
+
     for e in edges:
         Xe+=[layt[e[0]][0],layt[e[1]][0], None]# x-coordinates of edge ends
         Ye+=[layt[e[0]][1],layt[e[1]][1], None]
@@ -97,7 +99,7 @@ def library_clustering(*args,**kwargs):
             opacity=0.0)
 
     trace1 = Scatter3d(x=Xe,y=Ye,z=Ze,
-                mode='lines',line=Line(color='rgb(125,125,125)', width=1),
+                mode='lines',line=Line(color='rgb(0,0,0)', width=2),
                 hoverinfo='none')
     trace2 = Scatter3d(x=Xn,y=Yn,z=Zn,mode='markers',name='actors',
                 marker=marker,text=labels,hoverinfo='text')
@@ -116,9 +118,35 @@ def library_clustering(*args,**kwargs):
     # plot this formatting trash
     data=Data([trace1, trace2])
     fig=Figure(data=data, layout=layout)
-    py.iplot(fig, filename='Data: {}'.format(label))
+    py.plot(fig, filename='Data: {}'.format(label),auto_open=False)
+   
+    resolution = 200
+    return None
+    
+    for i in xrange(resolution):
+        
+        if os.path.isfile('./video/{}_{}.png'.format(label,'%05d' % i)): continue
+
+        x = 3*math.cos(2*3.1415*float(i)/resolution)
+        y = 3*math.sin(2*3.1415*float(i)/resolution)
+        z = 0 
+
+        camera = dict(
+        up=dict(x=0, y=0, z=1),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=x, y=y, z=z))
+
+        fig['layout'].update(
+            scene=dict(camera=camera),
+            )
+
+        if not os.path.exists('./video'): os.makedirs('./video')
+        py.image.save_as(fig, filename='./video/{}_{}.png'.format(label,'%05d' % i))
+        print 'Finished image {}!'.format(i+1)
 
 
+
+    print 'Finished saving image!'
 
 # FACTORY METHODS
 

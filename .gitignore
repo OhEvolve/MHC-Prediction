@@ -12,5 +12,6 @@
 !test_params.p
 # logs and models folder
 logs/*
+video/*
 # retired code
 #retired/*
