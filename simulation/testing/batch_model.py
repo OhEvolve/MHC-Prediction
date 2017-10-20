@@ -88,7 +88,7 @@ def batch_model(all_params,*args,**kwargs):
     # create a thread pool, and pass through threads 
     pool = ThreadPool(options['thread_count']) 
 
-    results = pool.map(multiple_model,all_params_exclusion)
+    results = pool.map_async(multiple_model,all_params_exclusion).get(999999999)
             
 
 def multiple_model(batch_params):

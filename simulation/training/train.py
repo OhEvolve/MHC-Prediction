@@ -105,19 +105,21 @@ def train_nn(model,data,**kwargs):
         if step >= num_steps: # check if at threshold of learning steps
             finished = True
         if np.isnan(batch_loss): # check if training has spiraled into NaN space
-            learning_mode *= 0.5
+            learning_mod *= 0.5
             init,step = model.reset_variables(),0
             model.sess.run(init)
             train_step = set_learning_fn(
-                    model.loss,options['learning_rate'],learning_mod*options['learning_mode'])
+                    model.loss,learning_mod*options['learning_rate'],options['learning_mode'])
             if not options['silent']: print 'Lowering learning rate and restarting...'
 
     print '[FINAL] Epoch loss ({})  /  Validation loss ({}) / Training time ({} s)'.format(
             epoch_loss,validation_loss,time.time() - start)
 
+
     if not options['silent']: print 'Finished!'
     
-    # stores logs of stepwise losses if needed later for saving model performance
+    # returns logs of stepwise losses if needed later for saving model performance
+    return step_loss
         
 
 

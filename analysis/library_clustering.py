@@ -48,8 +48,8 @@ def library_clustering(*args,**kwargs):
     # cluster each round in the same figure
     seqs_temp = []
     for seq in data:
-        if count_nonzero(seq[1:]) < 3: continue
-        seqs_temp.append([seq[0],6*math.log(1. + sum(seq[1:])),count_nonzero(seq[1:])])
+        if count_nonzero(seq[1:]) < 2: continue
+        seqs_temp.append([seq[0],6*math.log(1. + sum(seq[1:])),len(seq[1:]) - count_nonzero(seq[1:])])
 
     info = {
             'seqs':[s[0] for s in seqs_temp],
@@ -81,7 +81,7 @@ def graph3D(label,info,edges):
     G = ig.Graph(edges,directed = False) 
     G.add_vertices(N)
 
-    layt=G.layout('kk', dim=3)
+    layt=G.layout('kk_3d', dim=3)
 
     Xn=[layt[k][0] for k in range(N)]# x-coordinates of nodes
     Yn=[layt[k][1] for k in range(N)]# y-coordinates
@@ -94,15 +94,16 @@ def graph3D(label,info,edges):
         Ye+=[layt[e[0]][1],layt[e[1]][1], None]
         Ze+=[layt[e[0]][2],layt[e[1]][2], None]
 
-    marker = Marker(symbol='dot',size=info['read_count'],color=group,
-            colorscale='Viridis',line=Line(color='rgb(50,50,50)',width=0.5),
-            opacity=0.0)
+    marker = Marker(symbol='circle',size=info['read_count'],color=group,
+            colorscale='Greys',line=Line(color='rgb(50,50,50)',width=0.5),
+            opacity=1.0)
+
+    trace2 = Scatter3d(x=Xn,y=Yn,z=Zn,mode='markers',name='actors',
+                marker=marker,text=labels,hoverinfo='text')
 
     trace1 = Scatter3d(x=Xe,y=Ye,z=Ze,
                 mode='lines',line=Line(color='rgb(0,0,0)', width=2),
-                hoverinfo='none')
-    trace2 = Scatter3d(x=Xn,y=Yn,z=Zn,mode='markers',name='actors',
-                marker=marker,text=labels,hoverinfo='text')
+                hoverinfo='none',opacity=0.1)
 
     axis=dict(showbackground=False,
               showline=False,

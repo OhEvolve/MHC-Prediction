@@ -29,7 +29,7 @@ def run_library_complexity():
 ### CLUSTERING ###
 
 def run_library_clustering():
-    label_list = ['A12']#,'F3','226','5cc7']
+    label_list = ['A12']#,'F13','226','5cc7']
 
     for label in label_list:
 
@@ -42,10 +42,14 @@ def run_library_clustering():
         print 'Finished {}!'.format(label)
 
 
+### MODEL ROBUSTIVITY ###
+# Lower amount of data input, assess performance
+
+
 
 ### NAMESPACE CATCH ### 
 
 #run_library_complexity()
 run_library_clustering()
-
+#run_model_robustivity()
 
