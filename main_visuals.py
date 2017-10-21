@@ -29,7 +29,7 @@ def run_library_complexity():
 ### CLUSTERING ###
 
 def run_library_clustering():
-    label_list = ['A12']#,'F13','226','5cc7']
+    label_list = ['F3','226','5cc7']
 
     for label in label_list:
 

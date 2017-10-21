@@ -12,7 +12,7 @@ def spinn():
     """ Initialize a default cNN model """ 
     default_params = {
                      # training parameters
-                     'batch_size':100,
+                     'batch_size':1000,
                      'num_epochs':50,
                      'learning_rate':1,
                      # overall network parameters

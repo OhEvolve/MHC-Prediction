@@ -52,7 +52,7 @@ for r in xrange(repeats):
     
     time.sleep(0.5)
     im = ImageGrab.grab(bbox=(top[0],top[1],bottom_adjust[0],bottom_adjust[1]))
-    im.save('./video/test_{}.png'.format('%05d' % r))    
+    im.save('./video/{}_{}.png'.format('F3','%05d' % ((repeats-r)-1)))    
 
 #subprocess.call('ffmpeg -f image2 -r 1/24 -i video/A12_%05d.png -vcodec mpeg4 -y A12.mp4')
 

@@ -93,7 +93,7 @@ def train_nn(model,data,**kwargs):
             epoch_loss = 0
             
             # randomize input data
-            seed = np.random.randint(1,1000000) # pick a random seed
+            seed = np.random.randint(1000000) # pick a random seed
             for ind in xrange(2):
                 np.random.seed(seed) # set identical seeds
                 np.random.shuffle(data['training'][ind]) # shuffle data in place
@@ -106,8 +106,8 @@ def train_nn(model,data,**kwargs):
             finished = True
         if np.isnan(batch_loss): # check if training has spiraled into NaN space
             learning_mod *= 0.5
-            init,step = model.reset_variables(),0
-            model.sess.run(init)
+            step = 0
+            model.reset_variables()
             train_step = set_learning_fn(
                     model.loss,learning_mod*options['learning_rate'],options['learning_mode'])
             if not options['silent']: print 'Lowering learning rate and restarting...'

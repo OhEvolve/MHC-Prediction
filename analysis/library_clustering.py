@@ -95,8 +95,8 @@ def graph3D(label,info,edges):
         Ze+=[layt[e[0]][2],layt[e[1]][2], None]
 
     marker = Marker(symbol='circle',size=info['read_count'],color=group,
-            colorscale='Greys',line=Line(color='rgb(50,50,50)',width=0.5),
-            opacity=1.0)
+            colorscale='Greys',line=Line(color='rgb(220,220,220)',width=0.5),
+            opacity=0.0)
 
     trace2 = Scatter3d(x=Xn,y=Yn,z=Zn,mode='markers',name='actors',
                 marker=marker,text=labels,hoverinfo='text')

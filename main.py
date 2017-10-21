@@ -29,9 +29,18 @@ def main(args):
     for command in args['commands']: 
         if command == 'b': 
             all_params = generate_dicts(default = True)
-            batch_model(all_params,thread_count = 4)
+            batch_model(all_params,thread_count = 12)
             print 'Finished!'
 
+        if command == 's':
+
+            params = {
+                     'data_label':'A12.txt',
+                     'num_epochs':20,
+                     'reg_magnitude':0.01
+                     }
+
+            results = single_model(params)
 
 """ 
 Formatting

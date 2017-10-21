@@ -223,6 +223,7 @@ class BuildModel:
         # evaluate the weight matrices, and store in dict
         labels = ['W_sw','W_pw','W_fc','b_fc']
         for l,w in zip(labels,self.weights):
+            print 'WM:',w
             weight_matrix = self.sess.run(w,feed_dict={})
             model_dict[l] = weight_matrix
             
@@ -240,6 +241,7 @@ class BuildModel:
         for i in xrange(0,len(data),self.batch_size):
             if not self.silent: print 'Starting batch prediction at index {}...'.format(i)
             feed_dict = {self.train_x: data[i:i+self.batch_size,:]}
+            print 'YO:',self.y_out
             guesses[i:i+self.batch_size,:] = self.sess.run(self.y_out,feed_dict=feed_dict)
 
         if not self.silent: print 'Finished guessing!'

@@ -64,7 +64,7 @@ def batch_model(all_params,*args,**kwargs):
 
         # go through each excess thread and assign to group in need
         for i in xrange(options['thread_count'] - len(exclusion_dict)):
-            sorted(exclusion_usage, key=lambda x: x[1][0]/x[1][1])
+            exclusion_usage = sorted(exclusion_usage, key=lambda x: float(x[1][0])/x[1][1])
             exclusion_usage[-1][1][1] += 1 
 
     # assign parameters to groups
@@ -76,7 +76,7 @@ def batch_model(all_params,*args,**kwargs):
                                        'params_list': p,
                                        'options': dict([(key,params[key]) for key in exclusion_keys 
                                             if key in exclusion_dict[k][0].keys()])
-                                    })
+                                        })
 
 
     print 'Starting the following threads:'
@@ -154,12 +154,13 @@ def multiple_model(batch_params):
             for f in xrange(options['fold_count']):
 
                 # train neural network on training fold 
-                choose_training(model,data_folds[(r,f)],run_settings['type'])
+                step_loss = choose_training(model,data_folds[(r,f)],run_settings['type'])
                 
                 # save auroc score for given repeat,fold
                 results['auroc'].append(auroc_score(model,data_folds[(r,f)]['testing']))
                 results['weights'] = dict([(k,model.sess.run(w)) for k,w in model.weights.items()])
-
+                results['step_loss'] = step_loss
+                
                 # reset variables in model
                 model.reset_variables() 
                  
