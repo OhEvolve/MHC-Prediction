@@ -20,6 +20,8 @@ from simulation.training import *
 from simulation.testing import *
 from simulation.models import *
 
+from analysis import *
+
 # library modifications
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -37,11 +39,25 @@ def main(args):
             params = {
                      'data_label':'A12.txt',
                      'num_epochs':20,
+                     'learning_rate':20,
                      'reg_magnitude':0.01
                      }
 
             results = single_model(params)
 
+        if command == 'p': # p - probe a file
+             
+            fname = 'results_100003.p'
+            
+            if os.path.isfile(fname): 
+                data = pickle.load(open(fname),'rb')
+            elif os.path.isfile('/logs' + fname): 
+                data = pickle.load(open('/logs/' + fname),'rb')
+            else:
+                print 'File not found!'
+                return None
+            
+             
 """ 
 Formatting
 """
@@ -61,6 +77,16 @@ def getopts(argv):
     opts['commands'] = ''.join(opts['commands'])
     return opts
                                                                                                             
+
+def open_results_pickle(fname):
+    if os.path.isfile(fname): 
+        data = pickle.load(open(fname),'rb')
+    elif os.path.isfile('/logs' + fname): 
+        data = pickle.load(open('/logs/' + fname),'rb')
+    else:
+        print 'File not found!'
+        return None
+    return data
 
 """ namespace catch if called as script (which it should) """ 
 if __name__ == "__main__":

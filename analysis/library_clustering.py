@@ -121,32 +121,6 @@ def graph3D(label,info,edges):
     fig=Figure(data=data, layout=layout)
     py.plot(fig, filename='Data: {}'.format(label),auto_open=False)
    
-    resolution = 200
-    return None
-    
-    for i in xrange(resolution):
-        
-        if os.path.isfile('./video/{}_{}.png'.format(label,'%05d' % i)): continue
-
-        x = 3*math.cos(2*3.1415*float(i)/resolution)
-        y = 3*math.sin(2*3.1415*float(i)/resolution)
-        z = 0 
-
-        camera = dict(
-        up=dict(x=0, y=0, z=1),
-        center=dict(x=0, y=0, z=0),
-        eye=dict(x=x, y=y, z=z))
-
-        fig['layout'].update(
-            scene=dict(camera=camera),
-            )
-
-        if not os.path.exists('./video'): os.makedirs('./video')
-        py.image.save_as(fig, filename='./video/{}_{}.png'.format(label,'%05d' % i))
-        print 'Finished image {}!'.format(i+1)
-
-
-
     print 'Finished saving image!'
 
 # FACTORY METHODS
