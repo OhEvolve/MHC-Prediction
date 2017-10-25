@@ -9,6 +9,7 @@ author: PVH
 import os
 import unittest
 from sys import argv
+import pickle
 
 # nonstandard libraries
 import numpy as np
@@ -49,14 +50,9 @@ def main(args):
              
             fname = 'results_100003.p'
             
-            if os.path.isfile(fname): 
-                data = pickle.load(open(fname),'rb')
-            elif os.path.isfile('/logs' + fname): 
-                data = pickle.load(open('/logs/' + fname),'rb')
-            else:
-                print 'File not found!'
-                return None
-            
+            results = open_results_pickle(fname)
+
+            visualize_results_dict(results) 
              
 """ 
 Formatting
@@ -80,9 +76,9 @@ def getopts(argv):
 
 def open_results_pickle(fname):
     if os.path.isfile(fname): 
-        data = pickle.load(open(fname),'rb')
+        data = pickle.load(open(fname,'rb'))
     elif os.path.isfile('/logs' + fname): 
-        data = pickle.load(open('/logs/' + fname),'rb')
+        data = pickle.load(open('/logs/' + fname,'rb'))
     else:
         print 'File not found!'
         return None

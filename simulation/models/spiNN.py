@@ -4,10 +4,7 @@
 Project: Neural Network for MHC Peptide Prediction
 Class(s): BuildNetwork
 Function: Generates specified neural network architecture (data agnostic)
-
-Author: Patrick V. Holec
-'''
-
+Author: Patrick V. Holec ''' 
 
 
 # standard libaries

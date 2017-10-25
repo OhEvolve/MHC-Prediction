@@ -5,6 +5,11 @@ function: takes results dictionary, tries to display in a visually pleasing way
 author: PVH
 """
 
+# standard libraries
+
+# nonstandard libraries
+import matplotlib.pyplot as plt
+
 def visualize_results_dict(results, *args, **kwargs):
      
     """ Takes a dictionary, looks for entries to visualize """ 
@@ -19,19 +24,24 @@ def visualize_results_dict(results, *args, **kwargs):
 
     # iterate through each parameter in this dictionary 
 
-    for k,w in results:
-        
+    for k,w in results.items():
+
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1) 
+
         ### AUROC VISUALS ### 
         if k == 'auroc':
 
             colors = ['r','b']
 
-            for i,aurocs in enumerate([w['testing'],w['training']):
-                x1 = [i+1 for _ in len(aurocs)]
-                plt.xticks(x1,['testing','training']
-                plt.scatter(x,aurocs,colors[i])
+            for i,aurocs in enumerate([w['testing'],w['training']]):
+                x = [i+1 for _ in xrange(len(aurocs))]
+                plt.scatter(x,aurocs,color=colors[i])
 
-                plt.show(block=True)
-                raw_input('Press enter to close...')
-                plt.close()
+
+            plt.xticks([1,2],['testing','training'])
+
+            plt.show(block=True)
+            raw_input('Press enter to close...')
+            plt.close()
 

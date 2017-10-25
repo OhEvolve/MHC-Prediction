@@ -53,7 +53,8 @@ def single_model(*args,**kwargs):
 
     # initialize results
     results = {
-              'auroc':[],
+              'step_loss':[],
+              'auroc':{'testing':[],'training':[]},
               'weights':{}
               }
 
@@ -70,17 +71,21 @@ def single_model(*args,**kwargs):
             data_folded = fold_data(data,fold_index=f,fold_count=options['fold_count'])
 
             # train neural network on training fold 
-            choose_training(model,data_folded,run_settings['type'])
+            step_loss = choose_training(model,data_folded,run_settings['type'])
             
             # save auroc score for given repeat,fold
-            results['auroc'].append(auroc_score(model,data_folded['testing']))
-            results['weights'].append(dict([(k,model.sess.run(w)) for w in model.weights]))
+            results['auroc']['testing'].append(auroc_score(model,data_folded['testing']))
+            results['auroc']['training'].append(auroc_score(model,data_folded['training']))
+            results['weights'][f] = dict([(k,model.sess.run(w)) for k,w in model.weights.items()])
+            results['step_loss'] = step_loss
 
             # reset variables in model
             model.reset_variables() 
              
-    return results
+    save_results(results,silent=options['silent'])
 
+    return results
+    
 
 def merge_dicts(*dict_args):
     """
